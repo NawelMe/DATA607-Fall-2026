@@ -1,0 +1,120 @@
+---
+title: "Basic Data Loading and Transformation"
+author: "Noelle Messaoudi"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+# Overview
+
+This project uses the Titanic passenger dataset available through the [Seaborn GitHub repository](https://github.com/mwaskom/seaborn-data/blob/master/titanic.csv). The dataset contains information about Titanic passengers, including their survival status, passenger class, sex, age, fare, family relationships, and port of embarkation.
+
+I selected this dataset because it has a clear outcome variable, survival status, and several passenger characteristics that may help explain differences in survival. It is also small enough to explore and transform without requiring complicated data preparation.
+
+# Planned Approach
+
+I plan to load the dataset directly from its raw GitHub URL so that the analysis can be reproduced on another computer. I will select variables related to passenger survival, rename abbreviated columns, and replace numerical categories with labels that are easier to interpret. I will then use summary tables to compare survival outcomes across passenger classes.
+
+# Anticipated Data Challenges
+
+Some passenger ages and embarkation locations are missing from the dataset. The dataset also contains abbreviated column names and numerical categories that are not immediately understandable. For this introductory assignment, I will retain the missing values while documenting them and will transform the unclear names and categories into more descriptive labels.
+
+# Loading the Data
+
+The dataset is loaded directly from a raw GitHub URL. Loading the file from the web instead of from a local computer makes the analysis reproducible.
+
+```{r load-data}
+data_url <- "https://raw.githubusercontent.com/mwaskom/seaborn-data/master/titanic.csv"
+
+titanic_original <- read_csv(
+  file = data_url,
+  show_col_types = FALSE
+)
+
+glimpse(titanic_original)
+```
+
+# Selecting and Transforming Variables
+
+The original dataset contains 15 columns. For this analysis, I selected survival status, passenger class, sex, age, number of siblings or spouses aboard, number of parents or children aboard, fare, and embarkation town.
+
+I also replaced the numerical survival values with descriptive labels and renamed several columns so their meanings are clearer.
+
+```{r transform-data}
+titanic_selected <- titanic_original |>
+  select(
+    survived,
+    pclass,
+    sex,
+    age,
+    sibsp,
+    parch,
+    fare,
+    embark_town
+  ) |>
+  rename(
+    survival_status = survived,
+    passenger_class = pclass,
+    passenger_sex = sex,
+    passenger_age = age,
+    siblings_spouses_aboard = sibsp,
+    parents_children_aboard = parch,
+    ticket_fare = fare,
+    embarkation_town = embark_town
+  ) |>
+  mutate(
+    survival_status = case_when(
+      survival_status == 1 ~ "Survived",
+      survival_status == 0 ~ "Did not survive"
+    ),
+    passenger_class = case_when(
+      passenger_class == 1 ~ "First class",
+      passenger_class == 2 ~ "Second class",
+      passenger_class == 3 ~ "Third class"
+    )
+  )
+
+glimpse(titanic_selected)
+```
+
+# Preview of the Transformed Data
+
+The following output displays the first ten rows of the transformed data frame.
+
+```{r preview-data}
+head(titanic_selected, 10)
+```
+
+# Summary of Survival Status
+
+The following table counts the passengers in each survival category.
+
+```{r survival-summary}
+titanic_selected |>
+  count(survival_status)
+```
+
+# Survival by Passenger Class
+
+This table compares survival status across the three passenger classes.
+
+```{r class-summary}
+titanic_selected |>
+  count(passenger_class, survival_status)
+```
+
+# Conclusions
+
+The completed data frame contains a subset of the original variables, including the target variable, survival status. Numerical values and abbreviated column names were replaced with labels that are easier to understand.
+
+The work could be extended by calculating survival rates according to passenger class, sex, and age group. I could also examine missing age values, create visualizations, or compare these results with information from another historical Titanic dataset.
+
+# AI Use
+
+I used ChatGPT to help interpret the assignment requirements and to proofread my R code.
+
+OpenAI. (2026). ChatGPT [Large language model]. https://chatgpt.com/. Accessed September 20, 2026.
