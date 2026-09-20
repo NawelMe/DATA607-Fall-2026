@@ -118,3 +118,9 @@ The work could be extended by calculating survival rates according to passenger 
 I used ChatGPT to help interpret the assignment requirements and to proofread my R code.
 
 OpenAI. (2026). ChatGPT [Large language model]. https://chatgpt.com/. Accessed September 20, 2026.
+
+## Video Explanation
+
+A five minutes video walkthrough of this assignement is available in this link:
+https://youtu.be/xa19LfR47pQ
+
