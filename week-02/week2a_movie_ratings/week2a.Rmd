@@ -20,7 +20,7 @@ that data into R for analysis. The goal is to practice the full round trip —
 SQL schema design, a many-to-many ratings table, and reading SQL output into a
 tidy R data frame — while handling the reality that not every rater has an
 opinion on every title. Full SQL source:
-[create_tables.sql](https://raw.githubusercontent.com/amine-souissi0/data607-week2/main/week2a_movie_ratings/create_tables.sql).
+[create_tables.sql](https://raw.githubusercontent.com/NawelMe/DATA607-Fall-2026/main/week-02/week2a_movie_ratings/create_tables.sql).
 
 > **Data source disclosure:** for this assignment I used a small
 > representative sample derived from publicly available aggregate ratings on
@@ -42,7 +42,7 @@ downloads the raw SQL text, then executes each statement against a fresh,
 in-memory SQLite database.
 
 ```{r load-sql}
-sql_url <- "https://raw.githubusercontent.com/amine-souissi0/data607-week2/main/week2a_movie_ratings/create_tables.sql"
+sql_url <- "https://raw.githubusercontent.com/NawelMe/DATA607-Fall-2026/main/week-02/week2a_movie_ratings/create_tables.sql"
 
 sql_lines <- readLines(sql_url, warn = FALSE)
 
