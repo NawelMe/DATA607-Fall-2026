@@ -1,0 +1,156 @@
+---
+title: "DATA 607 — Week 2A: SQL and R (Movie Ratings)"
+author: "Noelle"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+library(tidyverse)
+library(DBI)
+library(RSQLite)
+```
+
+## Overview
+
+This report collects ratings for six titles across five raters, stores them
+in a small relational SQL database (`users`, `movies`, `ratings`), and loads
+that data into R for analysis. The goal is to practice the full round trip —
+SQL schema design, a many-to-many ratings table, and reading SQL output into a
+tidy R data frame — while handling the reality that not every rater has an
+opinion on every title. Full SQL source:
+[create_tables.sql](https://raw.githubusercontent.com/amine-souissi0/data607-week2/main/week2a_movie_ratings/create_tables.sql).
+
+> **Data source disclosure:** for this assignment I used a small
+> representative sample derived from publicly available aggregate ratings on
+> Goodreads and IMDb, rather than a live survey of five people I personally
+> asked. IMDb reports *Grey's Anatomy* at 7.6/10 and *Titanic* at 8.0/10,
+> which convert to approximately 3.8/5 and 4.0/5; Goodreads reports *Perfume*
+> at 4.04/5 and *The Little Prince* at 4.34/5. The five rows in `ratings`
+> were constructed so each title's average matches its public score, with a
+> couple of cells left missing (`NULL`) to model a rater who hasn't seen or
+> read that title. The rows do not represent people I personally surveyed;
+> ratings are on a 1–5 scale, and unavailable ratings are stored as missing
+> values rather than as zero.
+
+## Loading the SQL Script from GitHub
+
+The database is *built at run time* from a `.sql` file hosted on GitHub, so
+the whole pipeline is reproducible from a URL rather than a local file: R
+downloads the raw SQL text, then executes each statement against a fresh,
+in-memory SQLite database.
+
+```{r load-sql}
+sql_url <- "https://raw.githubusercontent.com/amine-souissi0/data607-week2/main/week2a_movie_ratings/create_tables.sql"
+
+sql_lines <- readLines(sql_url, warn = FALSE)
+
+# Drop full-line comments BEFORE splitting into statements. Doing this after
+# splitting would fail: this file opens with a multi-line comment block, so
+# the first "chunk" between semicolons starts with a comment line even
+# though it ends with a real CREATE TABLE statement — checking only whether
+# the whole chunk starts with "--" would wrongly discard it.
+sql_text <- sql_lines |>
+  discard(~ str_starts(str_trim(.x), "--")) |>
+  paste(collapse = "\n")
+
+statements <- str_split(sql_text, ";")[[1]] |>
+  str_trim() |>
+  discard(~ .x == "")
+
+con <- dbConnect(RSQLite::SQLite(), ":memory:")
+walk(statements, ~ dbExecute(con, .x))
+```
+
+## Querying the Database into a Data Frame
+
+A `JOIN` across all three tables turns the normalized SQL tables back into one
+wide, human-readable table — this is the "user-item matrix" the assignment
+mentions.
+
+```{r query}
+ratings_df <- dbGetQuery(con, "
+  SELECT u.name  AS user_name,
+         m.title AS movie_title,
+         r.rating
+  FROM ratings r
+  JOIN users  u ON u.user_id  = r.user_id
+  JOIN movies m ON m.movie_id = r.movie_id
+")
+
+ratings_df <- ratings_df |> as_tibble()
+head(ratings_df, 10)
+```
+
+## Handling Missing Ratings
+
+Not every person has seen every movie, so `rating` can be `NA`. We keep those
+rows (they're informative — "hasn't seen it" is different from "hated it")
+but exclude them from any average.
+
+```{r missing-data}
+ratings_df |>
+  summarize(
+    total_pairs   = n(),
+    missing_count = sum(is.na(rating)),
+    missing_pct   = round(100 * mean(is.na(rating)), 1)
+  )
+```
+
+## Analysis
+
+**Average rating per movie** (missing ratings excluded via `na.rm = TRUE`):
+
+```{r avg-per-movie}
+ratings_df |>
+  group_by(movie_title) |>
+  summarize(
+    avg_rating = round(mean(rating, na.rm = TRUE), 2),
+    n_ratings  = sum(!is.na(rating))
+  ) |>
+  arrange(desc(avg_rating))
+```
+
+**Average rating given per user** — a quick check for whether someone rates
+systematically higher or lower than the group:
+
+```{r avg-per-user}
+ratings_df |>
+  group_by(user_name) |>
+  summarize(
+    avg_given = round(mean(rating, na.rm = TRUE), 2),
+    n_seen    = sum(!is.na(rating))
+  ) |>
+  arrange(desc(avg_given))
+```
+
+```{r cleanup, include=FALSE}
+dbDisconnect(con)
+```
+
+## Conclusions and Findings
+
+*The Little Prince* comes out on top (4.4) and *Lolita*/*Grey's Anatomy* tie
+for lowest (3.8), which simply reproduces the public scores each row was
+built from — with only five rows and two missing cells, this dataset is too
+small to draw any real conclusion about rater behavior beyond confirming the
+pipeline (schema, JOIN, missing-value handling) works correctly end to end.
+Because the ratings are a constructed sample rather than five independently
+surveyed people, they shouldn't be read as evidence of genuine disagreement
+between raters — that's the main limitation to flag if this were extended.
+To extend this work: (1) replace these constructed rows with a live survey of
+five real people, which would make patterns like "who rates highest on
+average" actually meaningful, (2) add a `genre` column to `movies` to check
+whether average rating varies by genre, and (3) reshape `ratings_df` into a
+wide user-by-movie matrix (`pivot_wider`) as a first step toward a
+recommender system, since that matrix is exactly what collaborative
+filtering needs as input.
+
+## AI Use
+
+Anthropic. (2026). Claude (model: claude-sonnet-5) [Large language model].
+[https://claude.ai/](https://claude.ai/) — used to design the SQL schema
+(users/movies/ratings junction table), write the R code that loads the SQL
+script from a URL and executes it against an in-memory SQLite database, and
+draft the analysis and this write-up. Reviewed and adapted by the author.
