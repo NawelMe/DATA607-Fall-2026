@@ -17,10 +17,10 @@ vs. male) from the Palmer Penguins dataset, and looks at how the choice of
 probability threshold changes what the model's performance metrics say.
 `.pred_female` is the model's predicted probability of "female"; `sex` is the
 true label. Data:
-[penguin_predictions.csv](https://raw.githubusercontent.com/amine-souissi0/data607-week2/main/week2b_classification_metrics/penguin_predictions.csv).
+[penguin_predictions.csv](https://raw.githubusercontent.com/NawelMe/DATA607-Fall-2026/main/week-02/week2b_classification_metrics/penguin_predictions.csv).
 
 ```{r load-data}
-data_url <- "https://raw.githubusercontent.com/amine-souissi0/data607-week2/main/week2b_classification_metrics/penguin_predictions.csv"
+data_url <- "https://raw.githubusercontent.com/NawelMe/DATA607-Fall-2026/main/week-02/week2b_classification_metrics/penguin_predictions.csv"
 penguins <- read_csv(data_url, show_col_types = FALSE)
 glimpse(penguins)
 ```
