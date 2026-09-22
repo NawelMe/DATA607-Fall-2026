@@ -147,6 +147,6 @@ sql_result |>
 
 # AI Use
 
-Anthropic. (2026). *Claude Sonnet 5* [Large language model]. https://claude.ai. Accessed September 21, 2026.
+Anthropic. (2026). Claude Sonnet 5 [Large language model]. https://claude.ai. Accessed September 21, 2026.
 
-Claude was used as a tutor and pair-programmer: to explain window functions (partition, order, frame), to fetch and integrity-check the price data, to draft the SQL and `dplyr` code (which we then explained and tested), and to verify expected values with an independent calculation. All code in this report was reviewed and can be explained by the authors.
+Claude was used mainly to proofread the report, improve the clarity of the explanations, and provide limited help with checking the code and results. The final code, analysis, testing, and interpretation were reviewed and completed by the authors.

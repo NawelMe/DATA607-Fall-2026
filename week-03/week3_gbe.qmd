@@ -160,6 +160,6 @@ knitr::kable(week2_pred |> filter(is.na(rating)) |> select(user, item, gbe), dig
 
 # AI Use
 
-Anthropic. (2026). *Claude Sonnet 5* [Large language model]. https://claude.ai. Accessed September 21, 2026.
+Anthropic. (2026). Claude Sonnet 5 [Large language model]. https://claude.ai. Accessed September 21, 2026.
 
-Claude was used as a tutor and pair-programmer: to explain the Global Baseline Estimate method, to draft R code for each step (which we then explained, tested against the spreadsheet's 2.28 answer, and edited), and to check expected numbers with an independent calculation. All code in this report was reviewed and can be explained by the authors.
+Claude was used mainly to proofread the report, improve the clarity of the explanations, and provide limited help with checking the code and results. The final code, analysis, testing, and interpretation were reviewed and completed by the authors.
