@@ -1,0 +1,152 @@
+---
+title: "Assignment 3B: Window Functions on Stock Prices"
+author: "Noelle"
+date: 09/21/2026
+format:
+  html:
+    toc: true
+execute:
+  echo: true
+  warning: false
+---
+
+# Introduction
+
+This report uses **window functions** to compute, for each of three stocks (AAPL, MSFT, NVDA), a **year-to-date (YTD) average** and a **six-trading-day moving average** of the daily closing price since January 2022. The calculation is done in SQL (through SQLite) and independently in `dplyr`; the two results must match exactly. Both averages keep every row of the data, which is what makes them window functions rather than a `GROUP BY` summary.
+
+**Data.** Daily closing prices from Yahoo Finance, saved as `stock_prices.csv` in this repository so the report is reproducible. The series runs from 2022-01-03 to 2026-09-18, the last completed trading day when the data was pulled (an unfinished trading day was removed on purpose). Prices are split-adjusted (for example NVDA's June 2024 10-for-1 split) but not dividend-adjusted.
+
+# Step 1: Load and check the data
+
+Window functions depend on row order and row count, so we verify the data before using it.
+
+```{r load}
+library(tidyverse)
+
+url <- "https://raw.githubusercontent.com/NawelMe/DATA607-Fall-2026/main/week-03/stock_prices.csv"
+prices <- read_csv(url, show_col_types = FALSE)
+
+glimpse(prices)
+
+# Integrity checks
+stopifnot(nrow(prices) == 3546)                                  # 3 items x 1182 days
+stopifnot(all(count(prices, item)$n == 1182))
+stopifnot(nrow(count(prices, item, date) |> filter(n > 1)) == 0) # no duplicate days
+stopifnot(!anyNA(prices$close))                                  # no missing prices
+
+max_gap <- prices |> arrange(item, date) |>
+  mutate(gap_days = as.numeric(date - lag(date)), .by = item) |>
+  pull(gap_days) |> max(na.rm = TRUE)
+max_gap   # at most 4 calendar days (Friday to Tuesday over a long weekend)
+stopifnot(max_gap <= 4)
+```
+
+# Step 2: Window functions in SQL
+
+Two windows, defined once with a `WINDOW` clause:
+
+- `ytd`: partition by **item and year**, ordered by date, from the first row of the year up to the current row. Partitioning by year makes the average restart every January.
+- `w6`: partition by **item**, ordered by date, the current row plus the 5 rows before it. The `CASE` returns `NA` until a full 6-row window exists.
+
+`ROWS` counts physical rows (trading days), which is what we want; `RANGE` would group by values instead.
+
+```{r sql}
+library(DBI)
+library(RSQLite)
+
+con <- dbConnect(SQLite(), ":memory:")
+# SQLite has no date type, so we store dates as ISO text
+dbWriteTable(con, "prices", prices |> mutate(date = as.character(date)))
+
+sql_result <- dbGetQuery(con, "
+  SELECT item, date, close,
+         AVG(close) OVER ytd AS ytd_avg,
+         CASE WHEN COUNT(close) OVER w6 = 6 THEN AVG(close) OVER w6 END AS ma6
+  FROM prices
+  WINDOW ytd AS (PARTITION BY item, strftime('%Y', date) ORDER BY date
+                 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
+         w6  AS (PARTITION BY item ORDER BY date
+                 ROWS BETWEEN 5 PRECEDING AND CURRENT ROW)
+  ORDER BY item, date
+") |>
+  as_tibble() |>
+  mutate(date = as.Date(date))
+
+dbDisconnect(con)
+head(sql_result, 8)
+```
+
+# Step 3: The same calculation in dplyr (cross-check)
+
+`dplyr` has no single window clause, so we build each window with a different tool: `cummean()` for the YTD average and `zoo::rollmeanr()` for the moving average. Note the different groupings: the YTD average is grouped by item **and year**, the moving average by item only, because the 6-day window is allowed to cross New Year.
+
+```{r dplyr}
+library(zoo)
+
+dplyr_result <- prices |>
+  arrange(item, date) |>
+  mutate(year = year(date)) |>
+  mutate(ytd_avg = cummean(close), .by = c(item, year)) |>
+  mutate(ma6 = rollmeanr(close, k = 6, fill = NA), .by = item) |>
+  select(item, date, close, ytd_avg, ma6)
+
+head(dplyr_result, 8)
+```
+
+# Step 4: Validate
+
+```{r validate}
+# 1. The two independent methods agree everywhere (including the NA pattern)
+stopifnot(isTRUE(all.equal(sql_result$ytd_avg, dplyr_result$ytd_avg)))
+stopifnot(isTRUE(all.equal(sql_result$ma6,     dplyr_result$ma6)))
+
+# 2. Hand check: the 6th AAPL moving average is the mean of the first 6 closes
+aapl <- sql_result |> filter(item == "AAPL")
+stopifnot(near(aapl$ma6[6], mean(aapl$close[1:6])))
+stopifnot(sum(is.na(aapl$ma6)) == 5)              # first 5 rows have no full window
+
+# 3. YTD average restarts each January: on the first trading day of every year
+#    it equals that day's close
+sql_result |>
+  mutate(year = year(date)) |>
+  group_by(item, year) |>
+  slice_head(n = 1) |>
+  ungroup() |>
+  summarise(restarts_correctly = all(near(close, ytd_avg)))
+```
+
+# Step 5: Visualize
+
+Dashed line: YTD average (note the reset every January). Solid line: 6-day moving average, which follows the price closely. Grey: the daily close.
+
+```{r plot, fig.height=8, fig.width=8}
+sql_result |>
+  filter(date >= "2025-01-01") |>
+  ggplot(aes(date)) +
+  geom_line(aes(y = close, colour = "Daily close"), alpha = 0.5) +
+  geom_line(aes(y = ma6, colour = "6-day moving average")) +
+  geom_line(aes(y = ytd_avg, colour = "YTD average"), linetype = "dashed") +
+  facet_wrap(~ item, ncol = 1, scales = "free_y") +
+  scale_colour_manual(values = c("Daily close" = "grey55",
+                                 "6-day moving average" = "#1F4E79",
+                                 "YTD average" = "#C0504D")) +
+  labs(title = "Closing price, 6-day moving average and YTD average",
+       x = NULL, y = "Price (USD)", colour = NULL) +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+```
+
+# Conclusions and Findings
+
+<!-- TODO (student): write these in your own words. Prompts: -->
+
+- **What does each average tell you?** TODO: compare how closely the moving average follows the price versus how slowly the YTD average moves, and what the January reset does.
+- **What did the cross-check show?** TODO: why is getting the same numbers from two different tools stronger evidence than running one of them?
+- **What are the limits?** TODO: think about the window size (6 days), prices that are split- but not dividend-adjusted, and only three stocks.
+- **How would you extend this?** TODO: e.g. other window sizes, exponential moving averages, or a moving average crossover signal.
+
+# AI Use
+
+Anthropic. (2026). *Claude Sonnet 5* [Large language model]. https://claude.ai. Accessed September 21, 2026.
+
+Claude was used as a tutor and pair-programmer: to explain window functions (partition, order, frame), to fetch and integrity-check the price data, to draft the SQL and `dplyr` code (which we then explained and tested), and to verify expected values with an independent calculation. All code in this report was reviewed and can be explained by the authors.

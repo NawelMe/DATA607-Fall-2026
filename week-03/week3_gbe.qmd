@@ -1,0 +1,165 @@
+---
+title: "Assignment 3A: Global Baseline Estimate Recommender"
+author: "Noelle"
+date: 09/21/2026
+format:
+  html:
+    toc: true
+execute:
+  echo: true
+  warning: false
+---
+
+# Introduction
+
+This report implements a **Global Baseline Estimate (GBE)**, a non-personalized recommender system, in R. Using a spreadsheet of movie ratings from 16 critics, it predicts how a critic would rate a movie they have not seen as `global mean + movie bias + critic bias`. The code is first validated against the spreadsheet's known answer (2.28 for Param on Pitch Perfect 2), then reused on a small sample of books and movies from Week 2.
+
+Data files are loaded from this GitHub repository by URL, so the report is reproducible: `movie_ratings.csv` (from the course spreadsheet) and `week2_public_sample.csv`.
+
+# Step 1: Load the data
+
+We read the raw CSV from GitHub. Blank cells (and `?`, `N/A`) become `NA`, never `0`, because a blank means "not watched", not "hated it".
+
+```{r load}
+library(tidyverse)
+
+url <- "https://raw.githubusercontent.com/NawelMe/DATA607-Fall-2026/main/week-03/movie_ratings.csv"
+ratings_wide <- read_csv(url, na = c("", "NA", "?"), show_col_types = FALSE)
+
+glimpse(ratings_wide)
+
+# Test: 61 real ratings summing to 240 (so the global mean is 240/61 = 3.934)
+stopifnot(sum(!is.na(ratings_wide[, -1])) == 61)
+stopifnot(sum(ratings_wide[, -1], na.rm = TRUE) == 240)
+```
+
+# Step 2: Reshape from wide to long
+
+One row per (critic, movie) pair makes per-critic and per-movie averages easy. We keep the `NA` rows on purpose: they are the cells we want to predict.
+
+```{r reshape}
+ratings_long <- ratings_wide |>
+  pivot_longer(cols = -Critic, names_to = "movie", values_to = "rating")
+
+stopifnot(nrow(ratings_long) == 96)                 # 16 critics x 6 movies
+stopifnot(sum(!is.na(ratings_long$rating)) == 61)
+```
+
+# Step 3: Global mean and biases
+
+```{r biases}
+mu <- mean(ratings_long$rating, na.rm = TRUE)       # mean of ALL ratings
+
+movie_bias <- ratings_long |>
+  group_by(movie) |>
+  summarise(movie_avg = mean(rating, na.rm = TRUE)) |>
+  mutate(movie_bias = movie_avg - mu)
+
+user_bias <- ratings_long |>
+  group_by(Critic) |>
+  summarise(user_avg = mean(rating, na.rm = TRUE)) |>
+  mutate(user_bias = user_avg - mu)
+
+mu
+knitr::kable(movie_bias, digits = 3)
+knitr::kable(user_bias, digits = 3)
+```
+
+# Step 4: Predict one cell and validate
+
+```{r predict-one}
+predict_gbe <- function(critic, movie_name) {
+  b_movie <- movie_bias |> filter(movie == movie_name) |> pull(movie_bias)
+  b_user  <- user_bias  |> filter(Critic == critic)    |> pull(user_bias)
+  stopifnot(length(b_movie) == 1, length(b_user) == 1)
+  mu + b_movie + b_user
+}
+
+param_pp2 <- predict_gbe("Param", "PitchPerfect2")
+param_pp2
+
+# Validation against the spreadsheet answer (2.28)
+stopifnot(near(param_pp2, 2.2798594847775178))
+```
+
+Param's predicted rating for Pitch Perfect 2 is about **2.28**, matching the spreadsheet.
+
+# Step 5: Predict every cell and recommend
+
+```{r predict-all}
+predictions <- ratings_long |>
+  left_join(movie_bias, by = "movie") |>
+  left_join(user_bias,  by = "Critic") |>
+  mutate(gbe        = mu + movie_bias + user_bias,
+         gbe_capped = pmin(pmax(gbe, 1), 5))
+
+recommendations <- predictions |>
+  filter(is.na(rating)) |>
+  group_by(Critic) |>
+  slice_max(gbe, n = 1, with_ties = FALSE) |>
+  ungroup() |>
+  select(Critic, recommended_movie = movie, predicted = gbe_capped)
+
+knitr::kable(recommendations, digits = 2)
+```
+
+Some raw predictions exceed 5 (for example Xingjia on Deadpool). We rank on the raw score and display the value capped to the 1-5 scale.
+
+# Step 6: Reuse the model on the Week 2 data
+
+We wrap the pipeline in one function so the same logic runs on any ratings table whose first column identifies the rater.
+
+```{r reuse}
+run_gbe <- function(ratings_wide) {
+  id <- names(ratings_wide)[1]
+
+  long <- ratings_wide |>
+    rename(user = all_of(id)) |>
+    pivot_longer(cols = -user, names_to = "item", values_to = "rating")
+
+  mu <- mean(long$rating, na.rm = TRUE)
+
+  item_bias <- long |> group_by(item) |>
+    summarise(item_avg = mean(rating, na.rm = TRUE)) |>
+    mutate(item_bias = item_avg - mu)
+
+  user_bias <- long |> group_by(user) |>
+    summarise(user_avg = mean(rating, na.rm = TRUE)) |>
+    mutate(user_bias = user_avg - mu)
+
+  long |>
+    left_join(item_bias, by = "item") |>
+    left_join(user_bias, by = "user") |>
+    mutate(gbe = mu + item_bias + user_bias)
+}
+
+# Regression test: the refactored function must still give 2.28
+movie_pred <- run_gbe(ratings_wide)
+stopifnot(near(
+  movie_pred |> filter(user == "Param", item == "PitchPerfect2") |> pull(gbe),
+  2.2798594847775178
+))
+
+url2 <- "https://raw.githubusercontent.com/NawelMe/DATA607-Fall-2026/main/week-03/week2_public_sample.csv"
+week2_wide <- read_csv(url2, na = c("", "NA", "N/A", "?"), show_col_types = FALSE)
+week2_pred <- run_gbe(week2_wide)
+
+knitr::kable(week2_pred |> filter(is.na(rating)) |> select(user, item, gbe), digits = 2)
+```
+
+**Data disclosure.** The Week 2 ratings were not collected from people we surveyed. They are a representative sample constructed from public aggregate ratings (IMDb and Goodreads), on a 1-5 scale. Unavailable ratings are stored as missing values, not zero.
+
+# Conclusions and Findings
+
+<!-- TODO (student): write these in your own words. Prompts: -->
+
+- **What did the model predict?** TODO: e.g. what did it recommend for Param, and why is that different from Pitch Perfect 2?
+- **What are the limits of GBE?** TODO: think about the same bias applying to everyone, predictions above 5, and recommending "whatever is left" to someone who has seen almost everything.
+- **What happened on the Week 2 data?** TODO: why do the predictions there equal each sample's own average?
+- **How would you extend or verify this?** TODO: e.g. hold out known ratings and measure error, or try a personalized method such as item-item collaborative filtering.
+
+# AI Use
+
+Anthropic. (2026). *Claude Sonnet 5* [Large language model]. https://claude.ai. Accessed September 21, 2026.
+
+Claude was used as a tutor and pair-programmer: to explain the Global Baseline Estimate method, to draft R code for each step (which we then explained, tested against the spreadsheet's 2.28 answer, and edited), and to check expected numbers with an independent calculation. All code in this report was reviewed and can be explained by the authors.
