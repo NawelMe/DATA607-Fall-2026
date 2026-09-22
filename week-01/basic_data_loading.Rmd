@@ -121,6 +121,6 @@ OpenAI. (2026). ChatGPT [Large language model]. https://chatgpt.com/. Accessed S
 
 ## Video Explanation
 
-A five minutes video walkthrough of this assignement is available in this link:
+A five-minutes video walkthrough of this assignement is available on this link:
 https://youtu.be/xa19LfR47pQ
 
