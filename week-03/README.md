@@ -17,3 +17,8 @@ This assignment uses SQL and R to calculate year-to-date averages and six-day mo
 * `movie_ratings.csv` – Movie-ratings data for Assignment 3A
 * `week2_public_sample.csv` – Additional ratings data for Assignment 3A
 * `stock_prices.csv` – Stock-price data for Assignment 3B
+* 
+## Published Reports
+
+- [Assignment 3A: Global Baseline Estimate Recommender](https://rpubs.com/NoelleMe/1461068)
+- [Assignment 3B: Window Functions on Stock Prices](https://rpubs.com/NoelleMe/1461069)
