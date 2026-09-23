@@ -1,0 +1,155 @@
+---
+title: "DATA 607 — Project 1: Chess Tournament Results"
+author: "Nawel"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+library(tidyverse)
+```
+
+## Overview
+
+`tournamentinfo.txt` is a fixed-width text export of a chess tournament
+cross-table: two lines per player, with each player's name, state, total
+points, and pre/post ratings on the first line, and their per-round results
+and colors on the second. This report parses that file into a tidy data
+frame and produces a CSV with each player's name, state, total points,
+pre-tournament rating, and the average pre-tournament rating of the
+opponents they actually played. Source:
+[tournamentinfo.txt](https://raw.githubusercontent.com/NawelMe/DATA607-Fall-2026/main/project-01/tournamentinfo.txt).
+
+## Loading the Data
+
+```{r load}
+url <- "https://raw.githubusercontent.com/NawelMe/DATA607-Fall-2026/main/project-01/tournamentinfo.txt"
+raw_lines <- readLines(url, warn = FALSE)
+
+# Drop the dashed separator lines and the 2-line column header, leaving
+# exactly two lines per player.
+lines <- raw_lines[!str_starts(raw_lines, "-----")]
+lines <- lines[-(1:2)]
+
+length(lines) / 2  # should be a whole number: one pair of lines per player
+```
+
+## Parsing Strategy
+
+Each player spans two consecutive lines, so this is one parsing function
+applied to line pairs `(1,2), (3,4), (5,6), ...`:
+
+- **Line 1** (`Pair | Name | Total Pts | Round results...`): pipe-delimited.
+  The round columns look like `W 39`, `D 12`, or `U`/`H` for an unplayed or
+  bye round — the leading letter is the result, the number (if present) is
+  the *pair number* of the opponent faced that round.
+- **Line 2** (`State | USCF ID / Rating (Pre->Post) | ...`): the rating
+  field looks like `R: 1794` or, for a provisional rating, `R: 955P11->
+  979P18` — a regex pulls out just the digits right after `R:`, ignoring the
+  `P11` provisional-games marker so both formats parse the same way.
+
+```{r parse}
+parse_player <- function(i) {
+  l1 <- lines[i]
+  l2 <- lines[i + 1]
+
+  parts1 <- str_split(l1, "\\|")[[1]]
+  pair_num   <- as.integer(str_trim(parts1[1]))
+  name       <- str_trim(parts1[2])
+  points     <- as.numeric(str_trim(parts1[3]))
+  round_cols <- str_trim(parts1[4:length(parts1)])
+
+  parts2 <- str_split(l2, "\\|")[[1]]
+  state        <- str_trim(parts2[1])
+  rating_field <- str_trim(parts2[2])
+  pre_rating   <- as.integer(str_match(rating_field, "R:\\s*(\\d+)")[, 2])
+
+  # Only rounds with an actual opponent (W/L/D followed by a number) count;
+  # "U" (unplayed) and "H" (half-point bye) have no opponent to average in.
+  opp_match <- str_match(round_cols, "^[WLD]\\s*(\\d+)")[, 2]
+  opponents <- as.integer(opp_match[!is.na(opp_match)])
+
+  tibble(pair = pair_num, name = name, state = state,
+         points = points, pre_rating = pre_rating,
+         opponents = list(opponents))
+}
+
+players <- map_dfr(seq(1, length(lines) - 1, by = 2), parse_player)
+nrow(players)
+```
+
+## Computing Average Opponent Rating
+
+With every player's own pre-rating known, a lookup table maps pair number
+to pre-rating, and each player's list of opponent pair numbers (built
+above) is resolved through that lookup and averaged.
+
+```{r avg-opponent}
+rating_by_pair <- set_names(players$pre_rating, players$pair)
+
+players <- players |>
+  mutate(
+    avg_opponent_rating = map_dbl(
+      opponents,
+      ~ if (length(.x) == 0) NA_real_ else round(mean(rating_by_pair[as.character(.x)]))
+    )
+  )
+```
+
+## Verification
+
+The assignment states the first player's (Gary Hua) average opponent
+rating should be 1605, computed from opponents rated 1436, 1563, 1600,
+1610, 1649, 1663, and 1716.
+
+```{r verify}
+players |> filter(pair == 1) |> select(name, state, points, pre_rating, avg_opponent_rating)
+```
+
+This matches the assignment's worked example exactly, which confirms the
+parsing regex and the opponent-lookup logic are both correct — not just
+that the code runs without erroring.
+
+## Final Table and CSV Export
+
+```{r export}
+result <- players |>
+  transmute(
+    `Player's Name`                    = name,
+    `Player's State`                   = state,
+    `Total Points`                     = points,
+    `Player's Pre-Rating`              = pre_rating,
+    `Average Pre-Rating of Opponents`  = avg_opponent_rating
+  )
+
+write_csv(result, "tournament_results.csv")
+head(result, 10)
+```
+
+## Conclusions
+
+The 64-player cross-table parses cleanly into one row per player, with the
+one worked example the assignment provides (Gary Hua, avg. opponent rating
+1605) reproducing exactly. Two structural quirks in the raw format needed
+explicit handling rather than a generic parser: unplayed/bye rounds (`U`,
+`H`) have no opponent number and must be excluded from the average rather
+than treated as a 0-rated opponent, and provisional ratings are written as
+`955P11` rather than a plain integer, which a naive `as.integer()` on the
+whole field would fail on. To extend this work: compute each player's
+*rating change* (post-rating minus pre-rating) against their average
+opponent rating, to see whether players who faced stronger opposition
+tended to gain more rating regardless of their final point total.
+
+## AI Use
+
+Anthropic. (2026). Claude (model: claude-sonnet-5) [Large language model].
+[https://claude.ai/](https://claude.ai/) — used to design the two-line
+parsing strategy, write the regex for extracting ratings and opponent pair
+numbers (including the provisional-rating and bye-round edge cases), and
+verify the result against the assignment's own worked example before
+finalizing. Reviewed and adapted by the author.
+
+## Published Report
+
+[View the published report on RPubs](https://rpubs.com/NoelleMe/1460632)
