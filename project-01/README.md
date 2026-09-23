@@ -8,4 +8,4 @@ CUNY SPS, Fall 2026. Parses `tournamentinfo.txt` (a chess tournament cross-table
 ## Links
 
 - [GitHub repository](https://github.com/NawelMe/DATA607-Fall-2026)
-- [Published report on RPubs](https://rpubs.com/NoelleMe/1460632)
+- [Published report on RPubs](https://rpubs.com/NoelleMe/1461480)
