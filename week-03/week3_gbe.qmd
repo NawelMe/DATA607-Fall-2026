@@ -16,6 +16,12 @@ This report implements a **Global Baseline Estimate (GBE)**, a non-personalized 
 
 Data files are loaded from this GitHub repository by URL, so the report is reproducible: `movie_ratings.csv` (from the course spreadsheet) and `week2_public_sample.csv`.
 
+#Approach
+
+I started with the movie ratings spreadsheet and treated blank cells as movies a critic had not rated yet. I changed the data into a format with one row for each critic and movie, which made it easier to calculate averages. First, I found the overall average rating. Then I looked at how each movie and each critic differed from that average. I added those three pieces together to predict the missing ratings.
+
+I checked my calculation using the example for Param and Pitch Perfect 2, which came out to about 2.28. After that, I predicted the other missing ratings and chose the highest one as a recommendation for each critic. Finally, I used the same steps on the small Week 2 sample to see how the method worked with another set of ratings.
+
 # Step 1: Load the data
 
 We read the raw CSV from GitHub. Blank cells (and `?`, `N/A`) become `NA`, never `0`, because a blank means "not watched", not "hated it".
@@ -163,3 +169,9 @@ knitr::kable(week2_pred |> filter(is.na(rating)) |> select(user, item, gbe), dig
 Anthropic. (2026). Claude Sonnet 5 [Large language model]. https://claude.ai. Accessed September 21, 2026.
 
 Claude was used mainly to proofread the report, improve the clarity of the explanations, and provide limited help with checking the code and results. The final code, analysis, testing, and interpretation were reviewed and completed by the authors.
+
+
+# Video explanation walkthrough
+
+[View the published video on YouTube](https://www.youtube.com/watch?v=ud3t9keVRAU)
+
