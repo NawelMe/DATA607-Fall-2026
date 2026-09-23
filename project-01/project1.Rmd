@@ -21,6 +21,10 @@ pre-tournament rating, and the average pre-tournament rating of the
 opponents they actually played. Source:
 [tournamentinfo.txt](https://raw.githubusercontent.com/NawelMe/DATA607-Fall-2026/main/project-01/tournamentinfo.txt).
 
+## Approach
+
+I started by looking at how the tournament file was organized. Each player has two lines of information, so I paired those lines to collect their name, state, total points, and rating before the tournament. I then used the round results to identify the opponents each player actually faced. After matching those opponents to their ratings, I calculated the average opponent rating for each player. I left out byes and unplayed rounds because there was no opponent in those rounds. Finally, I checked Gary Hua's result against the example in the assignment and saved the finished table as a CSV file.
+
 ## Loading the Data
 
 ```{r load}
