@@ -144,11 +144,10 @@ tended to gain more rating regardless of their final point total.
 ## AI Use
 
 Anthropic. (2026). Claude (model: claude-sonnet-5) [Large language model].
-[https://claude.ai/](https://claude.ai/) — used to design the two-line
-parsing strategy, write the regex for extracting ratings and opponent pair
-numbers (including the provisional-rating and bye-round edge cases), and
-verify the result against the assignment's own worked example before
-finalizing. Reviewed and adapted by the author.
+[https://claude.ai/](https://claude.ai/) — used as a support tool to help
+review the parsing approach, troubleshoot the regular expressions, and check
+the results against the assignment example. I tested, reviewed, and adjusted
+the code before completing the project.
 
 ## Published Report
 
