@@ -154,4 +154,5 @@ the code before completing the project.
 [View the published report on RPubs](https://rpubs.com/NoelleMe/1461480)
 
 ## Video explanation walkthrough: 
+
 [View the published video on YouTube] (https://youtu.be/ySa5vHFaq9c)
