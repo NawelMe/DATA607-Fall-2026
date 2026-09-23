@@ -1,6 +1,6 @@
 ---
 title: "DATA 607 — Project 1: Chess Tournament Results"
-author: "Nawel"
+author: "Noelle"
 date: "`r Sys.Date()`"
 output: html_document
 ---
