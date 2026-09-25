@@ -1,0 +1,252 @@
+---
+title: "Assignment 5B: Chess Elo Calculations"
+author: "Noelle"
+date: 09/25/2026
+format:
+  html:
+    toc: true
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+# Introduction
+
+This report uses the chess tournament cross-table from Project 1 (64 players, 7 rounds) to ask which players scored more, and which scored fewer, points than their ratings predicted. For every game we compute the **expected score** with the Elo formula from the pre-tournament ratings of the two players, add up each player's expected points, and subtract them from the points they actually scored. We then list the five biggest overperformers and the five biggest underperformers.
+
+# Approach
+
+I read the tournament text file and pulled out each player's information and game results. I matched each game with the opponent's record to check that the results agreed. Next, I used the players' ratings to calculate the expected score for each game. I added those expected scores for each player, compared them with the points the player actually earned, and identified the players with the largest differences.
+
+**Formula and sources.** The expected score of a player with rating $R_A$ against an opponent with rating $R_B$ is
+
+$$E_A = \frac{1}{1 + 10^{(R_B - R_A)/400}}$$
+
+Source: Wikipedia contributors, "Elo rating system", https://en.wikipedia.org/wiki/Elo_rating_system (accessed September 24, 2026). The assignment also points to the video "The Elo Rating System for Chess and Beyond" (February 15, 2019).
+
+**Data.** `tournamentinfo.txt` is the Project 1 text file, stored in this GitHub repository so the report is reproducible.
+
+# Step 1: Read the raw text and learn its layout
+
+The file is not a table. Each player takes two lines (a player line and a detail line) followed by a separator line. We first label every line.
+
+```{r read}
+library(tidyverse)
+
+url <- "https://raw.githubusercontent.com/NawelMe/DATA607-Fall-2026/main/tournamentinfo.txt"
+raw_lines <- read_lines(url)
+
+line_type <- case_when(
+  str_detect(raw_lines, "^-+$")              ~ "separator",
+  str_detect(raw_lines, "^\\s+\\d+ \\|")     ~ "player",
+  str_detect(raw_lines, "^\\s+[A-Z]{2} \\|") ~ "detail",
+  TRUE                                       ~ "header"
+)
+table(line_type)
+
+# Tests: 196 lines; 64 players, each followed directly by a detail line
+stopifnot(length(raw_lines) == 196)
+stopifnot(sum(line_type == "player") == 64, sum(line_type == "detail") == 64)
+stopifnot(all(which(line_type == "detail") == which(line_type == "player") + 1))
+```
+
+# Step 2: One row per player
+
+Splitting each line on `|` puts every field in a predictable position. The rating is the digits after `R:` on the detail line.
+
+```{r players}
+players <- tibble(
+  player_line = raw_lines[line_type == "player"],
+  detail_line = raw_lines[line_type == "detail"]
+) |>
+  mutate(
+    pair_num   = as.integer(str_trim(str_split_i(player_line, "\\|", 1))),
+    name       = str_trim(str_split_i(player_line, "\\|", 2)),
+    total_pts  = as.numeric(str_trim(str_split_i(player_line, "\\|", 3))),
+    state      = str_trim(str_split_i(detail_line, "\\|", 1)),
+    pre_rating = as.integer(str_match(str_split_i(detail_line, "\\|", 2), "R:\\s*(\\d+)")[, 2])
+  )
+
+players |> select(pair_num, name, state, total_pts, pre_rating) |> head()
+
+stopifnot(nrow(players) == 64, all(players$pair_num == 1:64))
+stopifnot(!anyNA(select(players, pair_num, name, state, total_pts, pre_rating)))
+stopifnot(sum(players$total_pts) == 220, sum(players$pre_rating) == 88224)
+stopifnot(players$name[which.min(players$pre_rating)] == "JACOB ALEXANDER LAVALLEY")
+stopifnot(players$name[which.max(players$pre_rating)] == "GARY HUA")
+```
+
+Ten players have a *provisional* rating in the file (for example `R: 1220P13`, a rating based on few games). We use the number before the `P`.
+
+# Step 3: One row per game
+
+A result cell such as `W  39` means "won against player 39". Cells with only a letter (`H`, `B`, `U`, `X`) are rounds without an opponent: a half-point bye, a full-point bye, an unplayed round and a forfeit.
+
+```{r games}
+games <- map(4:10, \(i) str_split_i(players$player_line, "\\|", i)) |>
+  set_names(paste0("R", 1:7)) |>
+  as_tibble() |>
+  bind_cols(pair_num = players$pair_num) |>
+  pivot_longer(cols = R1:R7, names_to = "round", names_prefix = "R",
+               names_transform = as.integer, values_to = "cell") |>
+  mutate(result  = str_sub(str_trim(cell), 1, 1),
+         opp_num = as.integer(str_extract(cell, "\\d+"))) |>
+  select(pair_num, round, result, opp_num)
+
+table(games$result)
+
+stopifnot(nrow(games) == 448)
+stopifnot(sum(is.na(games$opp_num)) == 40)
+stopifnot(all(is.na(games$opp_num) == games$result %in% c("H", "B", "U", "X")))
+
+# Mirror test: if A beat B in round r, B must show a loss to A in round r
+played <- games |> filter(!is.na(opp_num))
+mirror <- played |>
+  rename(pair_num = opp_num, opp_num = pair_num) |>     # swap the two columns
+  mutate(mirror_result = case_when(result == "W" ~ "L", result == "L" ~ "W", TRUE ~ "D")) |>
+  select(pair_num, opp_num, round, mirror_result)
+joined <- inner_join(played, mirror, by = c("pair_num", "opp_num", "round"))
+stopifnot(nrow(joined) == nrow(played), all(joined$result == joined$mirror_result))
+
+# Points check: 204 points from played games + 16 from byes = 220 total points
+stopifnot(sum(games$result == "W") + 0.5 * sum(games$result == "D") == 204)
+stopifnot(0.5 * sum(games$result == "H") + sum(games$result %in% c("B", "X")) == 16)
+```
+
+# Step 4: Elo expected score for every game
+
+For rounds without an opponent there is nothing to predict, so we treat them as **neutral**: the expected points equal the actual points. A bye therefore adds the same amount to both totals and cannot make a player look like an over- or underperformer.
+
+```{r elo}
+elo_expected <- function(rating, opp_rating) {
+  1 / (1 + 10^((opp_rating - rating) / 400))
+}
+
+# Properties of the formula
+stopifnot(elo_expected(1500, 1500) == 0.5)
+stopifnot(near(elo_expected(1900, 1500), 0.9091, tol = 1e-4))
+stopifnot(near(elo_expected(1900, 1500) + elo_expected(1500, 1900), 1))
+
+points <- c(W = 1, D = 0.5, L = 0, H = 0.5, B = 1, X = 1, U = 0)
+
+games_elo <- games |>
+  left_join(select(players, pair_num, rating = pre_rating), by = "pair_num") |>
+  left_join(select(players, opp_num = pair_num, opp_rating = pre_rating), by = "opp_num") |>
+  mutate(actual   = unname(points[result]),
+         expected = coalesce(elo_expected(rating, opp_rating), actual))
+
+stopifnot(nrow(games_elo) == 448)
+stopifnot(near(sum(games_elo$actual), 220), near(sum(games_elo$expected), 220))
+
+# Hand check: Gary Hua (pair 1) expected about 5.16 points, scored 6
+gary <- games_elo |> filter(pair_num == 1)
+stopifnot(near(sum(gary$expected), 5.1616, tol = 1e-4))
+stopifnot(near(mean(gary$opp_rating), 1605.29, tol = 1e-2))   # Project 1 example: 1605
+```
+
+# Step 5: Expected and actual points per player
+
+```{r summary}
+player_summary <- games_elo |>
+  summarise(games_played = sum(!is.na(opp_num)),
+            actual       = sum(actual),
+            expected     = sum(expected),
+            .by = pair_num) |>
+  left_join(select(players, pair_num, name, state, pre_rating), by = "pair_num") |>
+  mutate(diff = actual - expected) |>
+  select(pair_num, name, state, pre_rating, games_played, actual, expected, diff)
+
+stopifnot(nrow(player_summary) == 64)
+# Actual points must reproduce the official totals in the file
+stopifnot(all(near(player_summary$actual,
+                   players$total_pts[match(player_summary$pair_num, players$pair_num)])))
+stopifnot(near(sum(player_summary$diff), 0))          # zero-sum: every game gives and takes the same
+stopifnot(sum(player_summary$games_played < 7) == 23)
+```
+
+# Step 6: The five biggest over- and underperformers
+
+```{r rank}
+top5    <- player_summary |> slice_max(diff, n = 5)
+bottom5 <- player_summary |> slice_min(diff, n = 5)
+
+show <- function(d) {
+  d |>
+    transmute(Player = name, State = state, `Pre-rating` = pre_rating,
+              Games = games_played, Actual = actual,
+              Expected = round(expected, 2), Difference = round(diff, 2)) |>
+    knitr::kable()
+}
+```
+
+**Overperformers** (actual points above the expectation):
+
+```{r top5}
+show(top5)
+```
+
+**Underperformers** (actual points below the expectation):
+
+```{r bottom5}
+show(bottom5)
+```
+
+```{r chart, fig.height=4.5, fig.width=8}
+extremes <- bind_rows(over = top5, under = bottom5, .id = "group")
+
+ggplot(extremes, aes(reorder(name, diff), diff, fill = group)) +
+  geom_col() +
+  coord_flip() +
+  scale_fill_manual(values = c(over = "#1F4E79", under = "#C0504D"),
+                    labels = c(over = "Overperformed", under = "Underperformed")) +
+  labs(title = "Five biggest over- and underperformers vs. Elo expectation",
+       x = NULL, y = "Actual minus expected points", fill = NULL) +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+```
+
+```{r rank-tests}
+stopifnot(setequal(top5$name, c("ADITYA BAJAJ", "ZACHARY JAMES HOUGHTON", "ANVIT RAO",
+                                "JACOB ALEXANDER LAVALLEY", "STEFANO LEE")))
+stopifnot(setequal(bottom5$name, c("LOREN SCHWIEBERT", "GEORGE AVERY JONES", "LARRY HODGE",
+                                   "JARED GE", "RISHI SHETTY")))
+stopifnot(all(abs(round(top5$diff, 2)    - c(4.05, 3.13, 3.06, 2.96, 2.71))   < 1e-9))
+stopifnot(all(abs(round(bottom5$diff, 2) - c(-2.78, -2.52, -2.40, -2.01, -1.59)) < 1e-9))
+stopifnot(sum(player_summary$diff > 0) == 28, sum(player_summary$diff < 0) == 36)
+```
+
+<!-- TODO (student): rewrite these observations in your own words. -->
+The overperformers were mostly low-rated players (average rating about 1151) and the underperformers were mostly high-rated (about 1473). Some low ratings are unreliable: Jacob Alexander Lavalley's rating of 377 is marked provisional (based on only 3 games), and so is Zachary James Houghton's 1220. Aditya Bajaj's 1384 is not provisional and his rating rose to 1640 after the tournament, so his result reflects real strength beyond his old rating.
+
+# Notes and limitations
+
+- **Byes and forfeits** (40 rounds) have no opponent, so they are treated as neutral (expected points equal actual points).
+- **Provisional ratings** (10 players) are noisy; large differences for those players partly reflect a bad starting rating.
+- **Games played differ**: 23 players played fewer than 7 games, so they cannot build up large positive or negative differences.
+- **Formula variants**: other implementations of Elo differ in small details; this report uses the standard logistic formula with a scale of 400.
+
+# Appendix: all 64 players
+
+```{r all}
+player_summary |>
+  arrange(desc(diff)) |>
+  transmute(Player = name, State = state, `Pre-rating` = pre_rating, Games = games_played,
+            Actual = actual, Expected = round(expected, 2), Difference = round(diff, 2)) |>
+  knitr::kable()
+```
+
+# Conclusions and Findings
+
+<!-- TODO (student): write these in your own words. Prompts: -->
+
+- **What did the analysis show?** TODO: name the biggest over- and underperformer and explain what "expected score" means.
+- **Why might low-rated players overperform?** TODO: think about provisional ratings, improving players, and regression to the mean.
+- **What are the limits?** TODO: byes, few games for some players, one tournament only, one formula.
+- **How would you extend or verify this?** TODO: e.g. compare with the post-tournament ratings in the file, use several tournaments, or use a different Elo implementation.
+
+# AI Use
+
+Anthropic. (2026). *Claude Sonnet 5* [Large language model]. https://claude.ai. Accessed September 24, 2026.
+
+I used Claude to help me understand the Elo formula and regular expressions, work through parts of the R code, and proofread my explanations. I reviewed the code, checked the results against calculations, and revised the writing before submitting the report.
