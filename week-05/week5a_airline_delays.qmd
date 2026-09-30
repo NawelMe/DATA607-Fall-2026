@@ -19,7 +19,7 @@ The data file `airline_delays.csv` was typed in by hand from the source table an
 
 # Approach
 
-I started with the airline delays table and kept its original layout in a CSV file. I then cleaned the blank rows and airline names and changed the data into a format with one row for each airline, city, and delay category. From there, I calculated the percentage of delayed flights for each airline overall and for each city. Finally, I compared the results and explained why the overall comparison gives a different impression from the city-by-city comparison.
+I will start with the airline delays table and kept its original layout in a CSV file. I will then clean the blank rows and airline names and change the data into a format with one row for each airline, city, and delay category. From there, I will calculate the percentage of delayed flights for each airline overall and for each city. Finally, I will compare the results and explaine why the overall comparison gives a different impression from the city-by-city comparison.
 
 # Step 1: Read the data
 
