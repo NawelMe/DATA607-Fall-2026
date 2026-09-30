@@ -17,9 +17,9 @@ This report uses the chess tournament cross-table from Project 1 (64 players, 7 
 
 # Approach
 
-I read the tournament text file and pulled out each player's information and game results. I matched each game with the opponent's record to check that the results agreed. Next, I used the players' ratings to calculate the expected score for each game. I added those expected scores for each player, compared them with the points the player actually earned, and identified the players with the largest differences.
+I will read the tournament text file and pull out each player's information and game results. I will match each game with the opponent's record to check that the results agree. Next, I will use the players' ratings to calculate the expected score for each game. I will add those expected scores for each player, compare them with the points the player actually earned, and identify the players with the largest differences.
 
-**Formula and sources.** The expected score of a player with rating $R_A$ against an opponent with rating $R_B$ is
+Formula and sources. I will calculate the expected score of a player with rating $R_A$ against an opponent with rating $R_B$ using:
 
 $$E_A = \frac{1}{1 + 10^{(R_B - R_A)/400}}$$
 
