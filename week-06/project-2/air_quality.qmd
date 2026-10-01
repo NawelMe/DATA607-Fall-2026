@@ -1,0 +1,151 @@
+---
+title: "Project 2 — Dataset 2: Air Quality Sensor Readings"
+author: "NOELLE"
+date: 10/01/2026
+format:
+  html:
+    toc: true
+    code-fold: true
+    theme: flatly
+execute:
+  echo: true
+  warning: false
+---
+
+## Introduction
+
+My classmate David Melchor mentioned the UCI Air Quality dataset on the Week 5 Discussion 5A board — hourly pollutant readings from a set of gas sensors in an Italian city, spread across a wide table with one column per pollutant. He didn't attach the file, so I pulled the actual dataset from the UCI Machine Learning Repository myself, since it's the exact one he referenced and it's public.
+
+## Approach
+
+I will download the raw file from UCI and put it in this repo without changing its structure, so it's still one row per hour with a separate column for every sensor reading. Then I will bring it into R, combine the date and time into one proper timestamp, and reshape the pollutant columns into long format so each row is one sensor reading at one point in time. This dataset uses `-200` as a stand-in for a missing reading, so I will deal with that explicitly rather than let it quietly get treated as a real number. Once it's tidy, I will look at how carbon monoxide levels change over the course of a day and whether there's any relationship between temperature and benzene levels.
+
+## Data source
+
+UCI Machine Learning Repository, "Air Quality" dataset (De Vito et al.), <https://archive.ics.uci.edu/dataset/360/air+quality>. It's hourly averaged readings from five metal-oxide gas sensors plus a reference analyzer, recorded in an Italian city from March 2004 to April 2005. I downloaded the CSV straight from UCI's site.
+
+## Data structure before tidying
+
+The raw file has 9,357 rows (one per hour) and 15 columns. `Date` and `Time` identify when the reading was taken, and the other 13 columns are the actual measurements — five reference-analyzer pollutant readings (`CO(GT)`, `NMHC(GT)`, `C6H6(GT)`, `NOx(GT)`, `NO2(GT)`), five sensor responses (`PT08.S1` through `PT08.S5`), and three weather readings (`T` for temperature, `RH` for relative humidity, `AH` for absolute humidity). It's wide because every pollutant gets its own column instead of the pollutant being a value in a `pollutant` column.
+
+Two things about how UCI published it that I need to deal with before it's usable:
+
+- It's semicolon-delimited with **commas as decimal points** (European formatting), so `2,6` means 2.6.
+- Missing readings are recorded as **`-200`**, not a blank cell.
+
+```{r load}
+library(tidyverse)
+library(lubridate)
+
+url <- "https://raw.githubusercontent.com/NawelMe/DATA607-Fall-2026/main/week-06/project-2/air_quality.csv"
+
+raw <- read_delim(
+  url,
+  delim = ";",
+  locale = locale(decimal_mark = ","),
+  show_col_types = FALSE
+)
+
+raw |> select(Date, Time, `CO(GT)`, `NOx(GT)`, T) |> head()
+```
+
+`locale(decimal_mark = ",")` tells `read_delim()` to parse `2,6` as the number 2.6 instead of choking on it or reading it as text — that one setting handles the European number format for every numeric column at once.
+
+## Transformation steps
+
+```{r tidy}
+tidy <- raw |>
+  mutate(datetime = dmy_hms(paste(Date, str_replace_all(Time, "\\.", ":")))) |>
+  select(-Date, -Time) |>
+  rename_with(~ str_replace_all(.x, "[().]", "_") |>
+                 str_replace_all("_+$", "") |>
+                 str_to_lower()) |>
+  pivot_longer(
+    cols      = -datetime,
+    names_to  = "sensor",
+    values_to = "reading"
+  ) |>
+  mutate(reading = na_if(reading, -200))
+
+tidy
+```
+
+Step by step:
+
+- `dmy_hms(paste(Date, ...))` glues the date and time columns into one real timestamp. The time in the raw file looks like `18.00.00` instead of `18:00:00`, so I swap the periods for colons first with `str_replace_all()`.
+- `rename_with()` cleans up all 13 measurement column names at once — `CO(GT)` becomes `co_gt`, `PT08.S1(CO)` becomes `pt08_s1_co`, and so on. That's the "consistent naming convention" step: no more parentheses or dots in a column name.
+- `pivot_longer()` is the actual reshape — instead of 13 separate pollutant columns, I get one `sensor` column naming which reading it is, and one `reading` column with the value.
+- `na_if(reading, -200)` is the missing-data decision: UCI's own documentation for this dataset says `-200` marks a reading that wasn't recorded, so I convert every `-200` to a real `NA`. Leaving it as `-200` would silently wreck any average I compute later — a -200 mixed into a mean is a disaster, not just a slightly wrong number.
+
+```{r missingness}
+missing_by_sensor <- tidy |>
+  summarise(pct_missing = round(100 * mean(is.na(reading)), 1), .by = sensor) |>
+  arrange(desc(pct_missing))
+
+missing_by_sensor |>
+  rename(Sensor = sensor, `% missing` = pct_missing) |>
+  knitr::kable()
+```
+
+The NMHC reference measurements (`nmhc_gt`) are missing for 90.2% of the hours. The other measurements have between 3.9% and 18.0% missing values. I will keep `nmhc_gt` in the tidy dataset for completeness, but exclude it from this analysis because so few readings are available. I will leave missing readings as `NA` rather than estimate them.
+
+## Analytical methods
+
+Two questions, both worked out from the tidy long table:
+
+1. **Daily pattern** — average carbon monoxide (`co_gt`) for each hour of the day, across the whole 13 months, to see when pollution peaks.
+2. **Temperature and benzene** — whether warmer hours tend to have higher or lower benzene (`c6h6_gt`) readings, using a scatterplot and a correlation.
+
+```{r hourly}
+hourly_co <- tidy |>
+  filter(sensor == "co_gt", !is.na(reading)) |>
+  mutate(hour = hour(datetime)) |>
+  summarise(avg_co = mean(reading), .by = hour) |>
+  arrange(hour)
+
+ggplot(hourly_co, aes(x = hour, y = avg_co)) +
+  geom_line(color = "#1F4E79", linewidth = 1) +
+  geom_point(color = "#1F4E79") +
+  scale_x_continuous(breaks = seq(0, 23, 2)) +
+  labs(title = "Average CO by hour of day",
+       x = "Hour of day (0–23)", y = "CO (mg/m³)") +
+  theme_minimal()
+```
+
+Average CO has a morning peak at 9 a.m. and a larger evening peak at 7 p.m. The highest average is about 3.7 mg/m³ at 7 p.m., and the lowest is about 0.7 mg/m³ at 5 a.m. This pattern is consistent with commuting traffic, although these readings alone cannot establish the source of the pollution.
+
+```{r temp-benzene}
+wide_pair <- tidy |>
+  filter(sensor %in% c("t", "c6h6_gt")) |>
+  pivot_wider(names_from = sensor, values_from = reading) |>
+  drop_na(t, c6h6_gt)
+
+correlation <- round(cor(wide_pair$t, wide_pair$c6h6_gt), 3)
+
+ggplot(wide_pair, aes(x = t, y = c6h6_gt)) +
+  geom_point(alpha = 0.15, color = "#1F4E79") +
+  geom_smooth(method = "lm", color = "#C0504D", se = FALSE) +
+  labs(title = paste0("Temperature vs. benzene (correlation = ", correlation, ")"),
+       x = "Temperature (°C)", y = "Benzene, C6H6 (µg/m³)") +
+  theme_minimal()
+```
+
+The correlation is 0.199, indicating a weak positive linear relationship between temperature and benzene. Higher temperatures tend to occur with slightly higher benzene readings, but there is considerable variation. This analysis does not show that temperature causes changes in benzene levels.
+
+## Conclusions
+
+## Conclusions
+
+CO levels are highest during the morning and evening, which is consistent with a possible contribution from commuting traffic. To investigate that explanation, I would compare these readings with traffic counts and separate weekdays from weekends.
+
+Temperature and benzene have a weak positive correlation. A stronger positive linear relationship would have a correlation closer to 1, with the points following an upward line more closely.
+
+I kept the NMHC measurements in the tidy table but left them out of the analysis because 90.2% are missing. Estimating that many readings would require assumptions that I have not tested.
+
+I would extend the analysis by comparing seasons and weekdays with weekends. I could also investigate whether the NMHC-targeted sensor response helps predict the reference measurements during hours when both are available.
+
+## AI Use
+
+Anthropic. (2026). *Claude Sonnet 5* [Large language model]. https://claude.ai. Accessed September 30, 2026.
+
+I used Claude to proofread my writing and help me find mistakes in my R code. I reviewed the suggestions and checked the changes before including them.
