@@ -19,7 +19,7 @@ The data file `airline_delays.csv` was typed in by hand from the source table an
 
 # Approach
 
-I will start with the airline delays table and kept its original layout in a CSV file. I will then clean the blank rows and airline names and change the data into a format with one row for each airline, city, and delay category. From there, I will calculate the percentage of delayed flights for each airline overall and for each city. Finally, I will compare the results and explaine why the overall comparison gives a different impression from the city-by-city comparison.
+I will start with the airline delays table and kept its original layout in a CSV file. I then will clean the blank rows and airline names and change the data into a format with one row for each airline, city, and delay category. From there, I will calculate the percentage of delayed flights for each airline overall and for each city. Finally, I will compare the results and explaine why the overall comparison gives a different impression from the city-by-city comparison.
 
 # Step 1: Read the data
 
@@ -118,8 +118,7 @@ ggplot(overall, aes(airline, pct_delayed, fill = airline)) +
   theme(legend.position = "none")
 ```
 
-<!-- TODO (student): rewrite this finding in your own words. -->
-Across all five cities, Alaska delayed 501 of 3,775 flights (13.3%) and AM West delayed 787 of 7,225 (10.9%). By this measure AM West looks better by about 2.4 percentage points.
+When I combined all five cities, Alaska had 501 delays out of 3,775 flights, or 13.3%. AM West had 787 delays out of 7,225 flights, or 10.9%. Based on the overall rates, AM West performed better by about 2.4 percentage points.
 
 # Comparison 2: The two airlines city by city
 
@@ -147,8 +146,7 @@ ggplot(by_city, aes(city, pct_delayed, fill = airline)) +
   theme(legend.position = "bottom")
 ```
 
-<!-- TODO (student): rewrite this finding in your own words. -->
-City by city, the conclusion reverses. Alaska has a lower delay rate in all five cities, by 2.7 to 11.9 percentage points. The gap is largest in San Francisco and Seattle.
+When I checked each city separately, Alaska had a lower delay rate in all five cities. The differences ranged from 2.7 to 11.9 percentage points, with the largest gaps in San Francisco and Seattle.
 
 # Why the two comparisons disagree (Simpson's paradox)
 
@@ -193,20 +191,20 @@ stopifnot(isTRUE(all.equal(sum(common_mix$weight), 1)))
 stopifnot(all(abs(round(100 * adjusted$adjusted_pct, 2) - c(9.21, 14.48)) < 1e-9))
 ```
 
-<!-- TODO (student): rewrite this explanation in your own words. -->
-The overall comparison and the city-by-city comparison disagree, which is an example of Simpson's paradox. Overall, AM West appears to have fewer delays (10.9% vs 13.3%), but Alaska has a lower delay rate in each of the five cities. The reason is the mix of destinations: 73% of AM West's flights go to Phoenix, the city with the fewest delays, while 57% of Alaska's flights go to Seattle, which has many. Once both airlines are given the same city mix, Alaska's delay rate (9.2%) is well below AM West's (14.5%).
+When I compared all flights, AM West looked better, with a delay rate of 10.9% versus 13.3% for Alaska. But Alaska had a lower delay rate in every city. This reversal is called Simpson’s paradox.
+
+The difference comes from where each airline flew. About 73% of AM West flights went to Phoenix, where delays were lowest, while 57% of Alaska flights went to Seattle, where delays were more frequent. After I applied the same city mix to both airlines, the adjusted rates were 9.2% for Alaska and 14.5% for AM West.
 
 # Conclusions and Findings
 
-<!-- TODO (student): write these in your own words. Prompts: -->
-
-- **Which airline performs better?** TODO: state your answer and which of the two views (overall or city by city) you trust more, and why.
-- **What is the lesson about overall percentages?** TODO: what should we check before trusting an overall rate?
-- **What are the limits of this data?** TODO: think about only five cities, no dates or flight distances, and what "delayed" means.
-- **How would you extend or verify this?** TODO: e.g. use the full flight data, add time of day or season, or test whether the gaps are statistically significant.
+When I compared all flights, AM West looked better, with a delay rate of 10.9% versus 13.3% for Alaska. But Alaska had a lower delay rate in every city. This reversal is called Simpson’s paradox.
+About 73% of AM West flights went to Phoenix, where delays were lowest, while 57% of Alaska flights went to Seattle, where delays were more frequent. Using the same city mix, I got adjusted rates of 9.2% for Alaska and 14.5% for AM West.
+I trusted the city-by-city comparison more because it compares the same destinations. Based on these data, I would choose Alaska. Before I trust an overall percentage, I needed to check the groups and their share of the total.
+My analysis covers only five cities, with no dates, flight distances, or definition of delayed. I would check more destinations, seasons, and times of day, then test whether the differences are statistically significant.
 
 # AI Use
 
-Anthropic. (2026). *Claude Sonnet 5* [Large language model]. https://claude.ai. Accessed September 24, 2026.
 
-I used Claude to help me understand the Elo formula and regular expressions, work through parts of the R code, and proofread my explanations. I reviewed the code, checked the results against calculations, and revised the writing before submitting the report.
+Anthropic. (2026). Claude Sonnet 5 [Large language model]. https://claude.ai. Accessed September 24, 2026.
+
+I used Claude to proofread my report, make my explanations clearer, and help me find errors when my R code did not run. I reviewed the suggested corrections and completed my final code, analysis, checks, and interpretation myself.
