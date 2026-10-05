@@ -138,15 +138,16 @@ sql_result |>
 
 # Conclusions and Findings
 
-<!-- TODO (student): write these in your own words. Prompts: -->
+The six-day moving average follows recent price changes more closely, while the YTD average moves more slowly as more trading days are included. It resets in January, so earlier prices no longer contribute to the new year.
 
-- **What does each average tell you?** TODO: compare how closely the moving average follows the price versus how slowly the YTD average moves, and what the January reset does.
-- **What did the cross-check show?** TODO: why is getting the same numbers from two different tools stronger evidence than running one of them?
-- **What are the limits?** TODO: think about the window size (6 days), prices that are split- but not dividend-adjusted, and only three stocks.
-- **How would you extend this?** TODO: e.g. other window sizes, exponential moving averages, or a moving average crossover signal.
+My cross-check gave the same results from both tools. This gives me more confidence in my calculations than relying on one tool alone.
+
+I used only three stocks and a six-day window. The prices account for stock splits but exclude dividend adjustments, so they do not represent total returns.
+
+I would compare different window sizes, try an exponential moving average, and examine signals when a shorter moving average crosses a longer one.
 
 # AI Use
 
-Anthropic. (2026). Claude Sonnet 5 [Large language model]. https://claude.ai. Accessed September 21, 2026.
+Anthropic. (2026). Claude Sonnet 5 [Large language model]. https://claude.ai. Accessed September 24, 2026.
 
-Claude was used mainly to proofread the report, improve the clarity of the explanations, and provide limited help with checking the code and results. The final code, analysis, testing, and interpretation were reviewed and completed by the authors.
+I used Claude to proofread my report, make my explanations clearer, and help me find errors when my R code did not run. I reviewed the suggested corrections and completed my final code, analysis, checks, and interpretation myself.
