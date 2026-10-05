@@ -16,6 +16,10 @@ This report uses **window functions** to compute, for each of three stocks (AAPL
 
 **Data.** Daily closing prices from Yahoo Finance, saved as `stock_prices.csv` in this repository so the report is reproducible. The series runs from 2022-01-03 to 2026-09-18, the last completed trading day when the data was pulled (an unfinished trading day was removed on purpose). Prices are split-adjusted (for example NVDA's June 2024 10-for-1 split) but not dividend-adjusted.
 
+# Approach
+
+I will load the stock prices and check for missing values, duplicate dates, and gaps between trading days. Then I will calculate the YTD average and six-trading-day moving average in SQLite and repeat the calculations in R. I will compare both results, check a few calculations by hand, and plot the averages alongside the daily prices to see how they follow price changes.
+
 # Step 1: Load and check the data
 
 Window functions depend on row order and row count, so we verify the data before using it.
