@@ -16,7 +16,7 @@ This report implements a **Global Baseline Estimate (GBE)**, a non-personalized 
 
 Data files are loaded from this GitHub repository by URL, so the report is reproducible: `movie_ratings.csv` (from the course spreadsheet) and `week2_public_sample.csv`.
 
-#Approach
+# Approach
 
 I started with the movie ratings spreadsheet and treated blank cells as movies a critic had not rated yet. I changed the data into a format with one row for each critic and movie, which made it easier to calculate averages. First, I found the overall average rating. Then I looked at how each movie and each critic differed from that average. I added those three pieces together to predict the missing ratings.
 
@@ -157,21 +157,20 @@ knitr::kable(week2_pred |> filter(is.na(rating)) |> select(user, item, gbe), dig
 
 # Conclusions and Findings
 
-<!-- TODO (student): write these in your own words. Prompts: -->
+The model recommended the unseen movie with the highest predicted rating for Param. Pitch Perfect 2 was a separate check, where I compared my calculation with the expected rating of 2.28.
 
-- **What did the model predict?** TODO: e.g. what did it recommend for Param, and why is that different from Pitch Perfect 2?
-- **What are the limits of GBE?** TODO: think about the same bias applying to everyone, predictions above 5, and recommending "whatever is left" to someone who has seen almost everything.
-- **What happened on the Week 2 data?** TODO: why do the predictions there equal each sample's own average?
-- **How would you extend or verify this?** TODO: e.g. hold out known ratings and measure error, or try a personalized method such as item-item collaborative filtering.
+GBE applies the same movie bias to every critic, so it does not account for individual tastes. Predictions also extend above 5. If someone has seen almost every movie, the recommendation depends on the few titles left.
+
+On my Week 2 data, each sample had only one rating per item. The item bias captured its difference from the overall mean, while the critic bias was zero. The predictions therefore matched the sample averages.
+
+I would hold out known ratings and compare my predictions with those scores. I would also try item-item collaborative filtering to account for personal preferences.
 
 # AI Use
 
-Anthropic. (2026). Claude Sonnet 5 [Large language model]. https://claude.ai. Accessed September 21, 2026.
+Anthropic. (2026). Claude Sonnet 5 \[Large language model\]. https://claude.ai. Accessed September 21, 2026.
 
 Claude was used mainly to proofread the report, improve the clarity of the explanations, and provide limited help with checking the code and results. The final code, analysis, testing, and interpretation were reviewed and completed by the authors.
 
-
-# Video explanation walkthrough
+# Video explanation walkthrough:
 
 [View the published video on YouTube](https://www.youtube.com/watch?v=ud3t9keVRAU)
-
