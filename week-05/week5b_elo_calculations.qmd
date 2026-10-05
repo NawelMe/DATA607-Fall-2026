@@ -1,7 +1,7 @@
 ---
 title: "Assignment 5B: Chess Elo Calculations"
 author: "Noelle"
-date: 09/25/2026
+date: 09/28/2026
 format:
   html:
     toc: true
@@ -238,12 +238,13 @@ player_summary |>
 
 # Conclusions and Findings
 
-<!-- TODO (student): write these in your own words. Prompts: -->
+I found Aditya Bajaj scored about 4.05 points above his Elo expectation, the largest positive difference. Loren Schwiebert scored about 2.78 points below his expectation, the largest negative difference. Expected score estimates points based on the ratings of a player and their opponents. It does not guarantee a result.
 
-- **What did the analysis show?** TODO: name the biggest over- and underperformer and explain what "expected score" means.
-- **Why might low-rated players overperform?** TODO: think about provisional ratings, improving players, and regression to the mean.
-- **What are the limits?** TODO: byes, few games for some players, one tournament only, one formula.
-- **How would you extend or verify this?** TODO: e.g. compare with the post-tournament ratings in the file, use several tournaments, or use a different Elo implementation.
+Some low-rated players performed better than their ratings suggested. Provisional ratings based on few games are less reliable, and improving players might have outgrown their earlier ratings. One strong tournament is not enough to know whether this performance will continue.
+
+I treated rounds without opponents as neutral, so they did not affect the differences. Players who played fewer games had fewer opportunities to score above or below expectations. My results cover one tournament and one Elo formula.
+
+I would compare these results with the post-tournament ratings and repeat the analysis across several tournaments. I would also check my calculations against another Elo implementation.
 
 # AI Use
 
