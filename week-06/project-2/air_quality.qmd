@@ -134,8 +134,6 @@ The correlation is 0.199, indicating a weak positive linear relationship between
 
 ## Conclusions
 
-## Conclusions
-
 CO levels are highest during the morning and evening, which is consistent with a possible contribution from commuting traffic. To investigate that explanation, I would compare these readings with traffic counts and separate weekdays from weekends.
 
 Temperature and benzene have a weak positive correlation. A stronger positive linear relationship would have a correlation closer to 1, with the points following an upward line more closely.
