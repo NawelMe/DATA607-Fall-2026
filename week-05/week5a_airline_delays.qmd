@@ -207,3 +207,9 @@ My analysis covers only five cities, with no dates, flight distances, or definit
 Anthropic. (2026). Claude Sonnet 5 [Large language model]. https://claude.ai. Accessed September 24, 2026.
 
 I used Claude to proofread my report, make my explanations clearer, and help me find errors when my R code did not run. I reviewed the suggested corrections and completed my final code, analysis, checks, and interpretation myself.
+
+## Video Presentation
+
+[Watch my airline delay presentation on YouTube](https://youtu.be/TvKlSHYDYFE)
+
+{{< video https://youtu.be/TvKlSHYDYFE >}}
