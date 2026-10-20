@@ -18,6 +18,6 @@ DATA 607 (CUNY SPS, Fall 2026): Project 2, tidying 3 classmates' wide-format dat
 
 (https://rpubs.com/NoelleMe/1464363)
 
-[YouTube video explanation]
+[YouTube video explanation](https://youtu.be/ziH5hIx9j0s)
 
 
