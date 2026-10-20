@@ -8,11 +8,9 @@ This assignment compares HTML and JSON using the same information about three da
 
 [View the Week 7 report on RPubs](https://rpubs.com/NoelleMe/1469291)
 
-## Discussion 7: API Video
+## Assignment Video
 
-[Using the Ensembl REST API in R: A Simple BRCA2 Gene Lookup](https://youtu.be/sHaii4tYYlI)
-
-For Discussion 7, I explain how to request information about the human gene BRCA2 through the Ensembl REST API, read the JSON response, and organize selected fields into a table in R.
+Video walkthrough of the HTML and JSON book assignment: coming soon.
 
 ## Assignment Files
 
