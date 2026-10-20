@@ -187,6 +187,10 @@ The ISBNs include hyphens, which help keep them as text during import. I would s
 
 This example gave me a way to compare file formats using the same information. Before combining imported data, I would check the structure as well as the values.
 
+## Assignment Video
+
+[Watch the HTML and JSON video walkthrough](https://youtu.be/QtqizXqV7H8)
+
 ## AI Use
 
 Anthropic. (2026). *Claude Sonnet 5.5* [Large language model]. https://claude.ai. Accessed October 10, 2026.
