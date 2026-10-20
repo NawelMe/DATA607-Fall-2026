@@ -187,12 +187,6 @@ The ISBNs include hyphens, which help keep them as text during import. I would s
 
 This example gave me a way to compare file formats using the same information. Before combining imported data, I would check the structure as well as the values.
 
-## Discussion 7: API Video
-
-[Using the Ensembl REST API in R: A Simple BRCA2 Gene Lookup](https://youtu.be/sHaii4tYYlI)
-
-For Discussion 7, I explain how to request information about the human gene BRCA2 through the Ensembl REST API, read the JSON response, and organize selected fields into a table in R.
-
 ## AI Use
 
 Anthropic. (2026). *Claude Sonnet 5.5* [Large language model]. https://claude.ai. Accessed October 10, 2026.
