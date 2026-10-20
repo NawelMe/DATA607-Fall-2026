@@ -1,0 +1,194 @@
+---
+title: "Week 7: Working with HTML and JSON"
+author: "Noelle Messaoudi"
+date: today
+format:
+  html:
+    toc: true
+    code-fold: true
+    theme: flatly
+execute:
+  echo: true
+  warning: false
+---
+
+## Introduction
+
+For this assignment, I used three books about data science in R to compare HTML and JSON. I entered the same book details into two files, then wrote R code to read each file into a data frame.
+
+I wanted to see whether matching information would produce identical data frames. The comparison looks at both the book details and how R stores them.
+
+## Approach
+
+I will select three books about data science in R and record the title, authors, year, publisher, and ISBN for each.
+
+I will enter the same information into an HTML table and a JSON file by hand, then upload both files to GitHub. In R, I will use `rvest` to read the HTML table and `jsonlite` to read the JSON file into separate data frames.
+
+I will compare their values, column names, and data types, then clean up any differences in structure and check whether the two data frames are identical.
+
+## The books
+
+I chose these three books because they cover different parts of working with data in R, including preparing data, analyzing text, and selecting features for predictive models.
+
+| Title | Authors | Year | Publisher | ISBN |
+|---|---|---|---|---|
+| R for Data Science (2nd edition) | Hadley Wickham, Mine Çetinkaya-Rundel, Garrett Grolemund | 2023 | O'Reilly Media | 978-1-492-09740-2 |
+| Text Mining with R: A Tidy Approach | Julia Silge, David Robinson | 2017 | O'Reilly Media | 978-1-491-98165-8 |
+| Feature Engineering and Selection: A Practical Approach for Predictive Models | Max Kuhn, Kjell Johnson | 2019 | Chapman & Hall/CRC | 978-1-138-07922-9 |
+
+## The two files
+
+The code below reads `books.html` and `books.json` from the `week-07` folder in my DATA607 repository.
+
+```{r setup}
+library(tidyverse)
+library(rvest)
+library(jsonlite)
+
+base_url <- "https://raw.githubusercontent.com/NawelMe/DATA607-Fall-2026/main/week-07"
+html_url <- paste0(base_url, "/books.html")
+json_url <- paste0(base_url, "/books.json")
+```
+
+### HTML
+
+This chunk displays the contents of the HTML file.
+
+```{r show-html}
+read_lines(html_url) |> cat(sep = "\n")
+```
+
+I used `<tr>` for each row, `<th>` for the column headings, and `<td>` for the book details.
+
+For books with multiple authors, I placed the names in one cell and separated them with semicolons. This keeps each book on one row, although the author names are stored as one text value.
+
+I wrote the publisher Chapman & Hall/CRC as `Chapman &amp; Hall/CRC` in the HTML source. The parser reads `&amp;` as an ampersand.
+
+### JSON
+
+This chunk displays the JSON file.
+
+```{r show-json}
+read_lines(json_url) |> cat(sep = "\n")
+```
+
+Each book is a JSON object with the same five fields. Unlike the HTML version, the JSON file stores the authors in an array.
+
+For example, the authors of Text Mining with R appear as `["Julia Silge", "David Robinson"]`. The year is written as a number, while the title, publisher, and ISBN are text.
+
+## Step 1: Read the HTML table
+
+```{r load-html}
+books_html <- read_html(html_url, encoding = "UTF-8") |>
+  html_element("table") |>
+  html_table()
+
+books_html
+```
+
+`read_html()` reads the page, `html_element("table")` selects its first table, and `html_table()` converts the table into a tibble.
+
+I specified UTF-8 encoding to preserve the Ç in Çetinkaya-Rundel. An encoding mismatch would affect the comparison even if the names looked similar at first glance.
+
+## Step 2: Read the JSON file
+
+```{r load-json}
+books_json <- fromJSON(json_url)
+
+books_json
+```
+
+`fromJSON()` converts the JSON objects into a data frame with one row per book.
+
+The authors column is a list column. Each entry holds a vector of author names rather than the single text value used in the HTML table.
+
+## Step 3: Compare the original data frames
+
+```{r compare-raw}
+identical(books_html, books_json)
+```
+
+This checks whether the two objects match exactly, including their structure and data types.
+
+The following table shows three differences to examine.
+
+```{r why-different}
+tibble(
+  `What` = c("Column names", "Type of object", "Authors column"),
+  `HTML frame` = c(
+    paste(names(books_html), collapse = ", "),
+    class(books_html)[1],
+    class(books_html$Authors)
+  ),
+  `JSON frame` = c(
+    paste(names(books_json), collapse = ", "),
+    class(books_json)[1],
+    class(books_json$authors)
+  )
+) |> knitr::kable()
+```
+
+The HTML headings use capital letters, such as `Title` and `Authors`, while the JSON fields use lowercase names.
+
+The HTML table is returned as a tibble, while the JSON file produces a standard data frame. Their author columns also differ because HTML stores the names together as text and JSON keeps them in a list.
+
+These differences explain why matching book details alone are not enough for `identical()` to return `TRUE`.
+
+## Step 4: Make the structures consistent
+
+I used one function to apply the same column names, object class, year type, and column order to both data frames.
+
+```{r normalize}
+tidy_books <- function(df) {
+  df |>
+    as_tibble() |>
+    rename_with(tolower) |>
+    mutate(
+      authors = map_chr(authors, \(a) paste(a, collapse = "; ")),
+      year = as.integer(year)
+    ) |>
+    select(title, authors, year, publisher, isbn)
+}
+
+html_clean <- tidy_books(books_html)
+json_clean <- tidy_books(books_json)
+
+html_clean
+```
+
+For the JSON data, `map_chr()` joins each vector of author names into one string separated by semicolons. For the HTML data, each entry is already a string, so this step leaves it unchanged.
+
+I also converted the year to an integer in both versions instead of relying on the types chosen during import.
+
+## Step 5: Compare the cleaned data frames
+
+```{r compare-clean}
+identical(html_clean, json_clean)
+all.equal(html_clean, json_clean)
+all(html_clean == json_clean)
+
+stopifnot(nrow(html_clean) == 3, ncol(html_clean) == 5)
+stopifnot(identical(html_clean, json_clean))
+```
+
+These checks compare the cleaned objects and their values. If the files contain the same details and use matching author separators, the three comparisons should return `TRUE`.
+
+The final checks require three rows, five columns, and identical cleaned data frames. If any requirement fails, R stops the report so I know something needs attention.
+
+## What I learned
+
+The main difference in this example is how the two formats store multiple authors. I used one text value per book in HTML and an array in JSON. To compare the imported data frames directly, I converted the author arrays into text.
+
+That choice works for this assignment. For an analysis of individual authors, I would keep the JSON list column or separate the names into rows instead.
+
+I also paid attention to data types. HTML table values are parsed from text, and `html_table()` attempts to infer their types. JSON distinguishes numbers from strings in the source file. Explicitly converting the year helped make the comparison consistent.
+
+The ISBNs include hyphens, which help keep them as text during import. I would still treat ISBNs as identifiers rather than numbers because they are labels, not quantities to calculate with.
+
+This example gave me a way to compare file formats using the same information. Before combining imported data, I would check the structure as well as the values.
+
+## AI Use
+
+Anthropic. (2026). *Claude Sonnet 5.5* [Large language model]. https://claude.ai. Accessed October 10, 2026.
+
+I used Claude to help plan the comparison, draft the R code and report, and review the book details. I used ChatGPT to revise the wording, update the GitHub URL, and prepare and upload the HTML, JSON, and Quarto files.
