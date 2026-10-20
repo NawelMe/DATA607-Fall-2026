@@ -191,4 +191,4 @@ This example gave me a way to compare file formats using the same information. B
 
 Anthropic. (2026). *Claude Sonnet 5.5* [Large language model]. https://claude.ai. Accessed October 10, 2026.
 
-I used Claude to help plan the comparison, draft the R code and report, and review the book details. I used ChatGPT to revise the wording, update the GitHub URL, and prepare and upload the HTML, JSON, and Quarto files.
+I used Claude to help plan the comparison, draft the R code and report, and review the book details.
