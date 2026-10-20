@@ -34,7 +34,7 @@ The file is not a table. Each player takes two lines (a player line and a detail
 ```{r read}
 library(tidyverse)
 
-url <- "https://raw.githubusercontent.com/NawelMe/DATA607-Fall-2026/main/tournamentinfo.txt"
+url <- "https://raw.githubusercontent.com/NawelMe/DATA607-Fall-2026/main/project-01/tournamentinfo.txt"
 raw_lines <- read_lines(url)
 
 line_type <- case_when(
