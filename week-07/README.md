@@ -6,11 +6,11 @@ This assignment compares HTML and JSON using the same information about three da
 
 ## Published Report
 
-RPubs link: To be added.
+[View the Week 7 report on RPubs](https://rpubs.com/NoelleMe/1469291)
 
 ## Video Explanation
 
-Video link: To be added.
+Coming soon.
 
 ## Assignment Files
 
