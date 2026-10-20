@@ -10,7 +10,7 @@ This assignment compares HTML and JSON using the same information about three da
 
 ## Assignment Video
 
-Video walkthrough of the HTML and JSON book assignment: coming soon.
+[Watch the HTML and JSON video walkthrough](https://youtu.be/QtqizXqV7H8)
 
 ## Assignment Files
 
