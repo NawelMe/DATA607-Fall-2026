@@ -1,0 +1,167 @@
+---
+title: "Finding hidden missing data with tidyr::complete()"
+author: "Noelle Messaoudi"
+date: today
+format:
+  html:
+    toc: true
+    code-fold: true
+    embed-resources: true
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+## The question
+
+What proportion of tagged fish was detected at each monitoring station? This example uses `tidyr::complete()` to include combinations that have no recorded row, so the calculation includes all tagged fish in its denominator.
+
+```{r setup}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+```
+
+## The data
+
+The built-in `tidyr::fish_encounters` dataset records detections of tagged fish moving downstream. Each recorded row identifies a fish and a station, with `seen = 1`. There are no explicit rows for nondetections.
+
+```{r data}
+fish_encounters |> head(10)
+
+n_fish <- n_distinct(fish_encounters$fish)
+n_stations <- nlevels(fish_encounters$station)
+n_possible <- n_fish * n_stations
+
+tibble(
+  fish = n_fish,
+  stations = n_stations,
+  possible_combinations = n_possible,
+  recorded_rows = nrow(fish_encounters),
+  missing_combinations = n_possible - nrow(fish_encounters)
+)
+```
+
+There are **`r n_fish` fish** and **`r n_stations` stations**, giving **`r n_possible` possible combinations**. Only **`r nrow(fish_encounters)`** are recorded. The other **`r n_possible - nrow(fish_encounters)`** combinations are implicit missing values: the rows do not exist.
+
+## Why the original average is misleading
+
+```{r recorded-only}
+recorded_summary <- fish_encounters |>
+  summarise(share_detected = mean(seen), .by = station)
+
+recorded_summary
+```
+
+Every average equals 1 because every recorded row is a detection. This answers a question about recorded encounters, rather than the proportion of all tagged fish detected at a station.
+
+## Make the missing combinations explicit
+
+```{r complete-grid}
+fish_full <- fish_encounters |>
+  complete(fish, station, fill = list(seen = 0), explicit = FALSE)
+
+fish_full |> head(15)
+```
+
+`complete(fish, station)` creates every combination of fish and station. `fill = list(seen = 0)` marks the new combinations as nondetections. `explicit = FALSE` limits filling to newly created rows, preserving any existing `NA` values.
+
+Here, zero means **no detection was recorded**. It does not prove that a fish was absent, died, or never passed the station. Interpreting a missing row as a nondetection is appropriate for this encounter dataset; in other datasets, a missing row could mean a measurement was never taken.
+
+```{r check-grid}
+stopifnot(
+  anyDuplicated(fish_full[c("fish", "station")]) == 0L,
+  nrow(fish_full) == n_possible,
+  sum(fish_full$seen == 1) == nrow(fish_encounters),
+  sum(fish_full$seen == 0) == n_possible - nrow(fish_encounters)
+)
+
+tibble(
+  original_detections = sum(fish_full$seen == 1),
+  added_nondetections = sum(fish_full$seen == 0),
+  total_combinations = nrow(fish_full)
+)
+```
+
+## Calculate the proportion using all tagged fish
+
+```{r station-summary}
+station_summary <- fish_full |>
+  summarise(
+    fish_detected = sum(seen),
+    fish_in_cohort = n(),
+    share_detected = mean(seen),
+    .by = station
+  ) |>
+  arrange(station)
+
+station_summary |> knitr::kable(digits = 3)
+```
+
+Each station now has the same denominator: all **`r n_fish` tagged fish**. The resulting proportions describe detections within this cohort, rather than the reliability of the monitoring equipment or fish survival.
+
+```{r detection-plot, fig.width=9, fig.height=5}
+ggplot(station_summary, aes(station, share_detected, group = 1)) +
+  geom_line(color = "#1F4E79") +
+  geom_point(color = "#1F4E79", size = 2.5) +
+  scale_y_continuous(labels = scales::percent, limits = c(0, 1)) +
+  labs(
+    title = "Share of tagged fish detected at each station",
+    subtitle = "Stations ordered from upstream to downstream",
+    x = "Monitoring station", y = "Proportion of tagged fish detected"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(axis.text.x = element_text(angle = 35, hjust = 1))
+```
+
+`station` is a factor whose levels follow river order. `complete()` uses all factor levels, and the plot retains this order.
+
+## A nondetection followed by a later detection
+
+The complete grid also lets us identify fish missed at a station but detected farther downstream.
+
+```{r later-detection}
+missed_then_seen <- fish_full |>
+  mutate(position = as.integer(station)) |>
+  mutate(furthest_detection = max(position[seen == 1]), .by = fish) |>
+  filter(seen == 0, position < furthest_detection) |>
+  select(fish, station)
+
+missed_then_seen
+```
+
+This returns **`r nrow(missed_then_seen)` fish-station combination(s)**. A downstream detection supports the interpretation that the earlier nondetection does not establish that the fish stopped migrating. It does not identify the reason for the missed detection.
+
+## Why `explicit = FALSE` matters
+
+Suppose an existing row has an unknown measurement. We may want to keep that unknown value while filling only combinations that were absent entirely.
+
+```{r existing-missing-values}
+example <- tibble(
+  fish = c("A", "A", "B"),
+  station = c("upstream", "downstream", "upstream"),
+  seen = c(1, NA, 1)
+)
+
+example |>
+  complete(fish, station, fill = list(seen = 0), explicit = FALSE)
+```
+
+The existing unknown value for fish A stays `NA`. The newly added downstream row for fish B becomes zero. Without `explicit = FALSE`, the default behavior would replace the existing `NA` with zero as well.
+
+## Takeaways
+
+- Check whether missing information is a blank cell or an absent row.
+- Use `complete()` to build the combinations relevant to your question.
+- Fill with zero only when zero has a defensible meaning.
+- Use `explicit = FALSE` when existing unknown measurements should remain unknown.
+
+## References
+
+- tidyr. [Complete a data frame with missing combinations](https://tidyr.tidyverse.org/reference/complete.html).
+- tidyr. [Fish encounters dataset](https://tidyr.tidyverse.org/reference/fish_encounters.html), supplied by Myfanwy Johnston.
+
+## AI Use and draft assistance
+
+This vignette builds on a draft supplied by a collaborator. The supplied draft disclosed Claude assistance with the topic, code, and explanations. ChatGPT helped revise the code, distinguish nondetection from absence, and add the example preserving existing missing values. Numerical statements in the vignette are generated from the R code.
