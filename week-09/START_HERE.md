@@ -1,6 +1,6 @@
 # Week 9: remaining submission steps
 
-Prepared for Noelle Messaoudi. GitHub username: `NawelMe`.
+GitHub username: `NawelMe`.
 
 ## 1. NY Times API
 
