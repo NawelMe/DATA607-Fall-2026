@@ -18,17 +18,17 @@ execute:
 
 ## Introduction
 
-For this assignment I'm using the New York Times Books API to look at the Hardcover Fiction best-seller list. The question I want to answer is simple: is this week's list mostly books that have been around for a long time, or mostly newer arrivals, and is that different from the same week a year ago? I'll send a request to the API, turn the JSON that comes back into a clean data frame, and compare the two weeks.
+I used the New York Times Books API to compare two Hardcover Fiction best-seller lists, 52 weeks apart. I wanted to know whether the latest list had more books that had stayed on the list for several weeks, or more recent entries.
 
 ## Approach
 
-First I will make an API key on the NYT developer site and store it as an environment variable, so it never shows up in my code or on GitHub. Then I'll write a small function that asks the Books API for the Hardcover Fiction list on a given date, checks that the request worked, and saves the raw JSON in the `data/` folder. I'll make two requests, one for the current week and one for the same week a year earlier. After that I'll parse the JSON, clean it into a tidy table with one row per book, and compare the two weeks: how long the books have been on the list, who's at the top, and which titles are the longest-running. I'll finish by writing up what I found and what the data can't tell me.
+The code requests both lists, saves the JSON responses, and turns the book records into a table. I compare the median weeks on the list, count recent and longer-running entries, and look at the top-ranked books. The saved responses let me render the report again without repeating the requests.
 
 ## The API
 
 - **API:** NYT Books API, version 3 (<https://developer.nytimes.com/docs/books-product/1/overview>)
 - **Endpoint:** `GET https://api.nytimes.com/svc/books/v3/lists/{date}/{list}.json`
-- **What it does:** returns one best-seller list for one week. Each book comes with its rank, last week's rank, how many weeks it's been on the list, the title, author, publisher, a short description, and ISBNs.
+- **What it does:** returns one best-seller list for one week. Each book comes with its rank, the previous rank, how many weeks it has been on the list, the title, author, publisher, a short description, and ISBNs.
 - **Why this endpoint:** it takes a date, so I can ask for the current week and for the same week a year ago, and it returns one list in full with the "weeks on list" number for every book, which is what my question needs.
 
 ## The requests
@@ -39,16 +39,11 @@ First I will make an API key on the NYT developer site and store it as an enviro
 | `list` | `hardcover-fiction` | in the URL path |
 | `api-key` | my key, read from the `NYT_API_KEY` environment variable | in the query string |
 
-The comparison uses the publication date returned by the API, rather than the date I run this document. I subtract 364 days (52 weeks) to compare the same weekday approximately one year earlier. This is not necessarily the same calendar date. The list publication date also differs from the sales week represented by the list.
+I use the list date returned by the API and subtract 364 days, or 52 weeks, for the earlier comparison. This keeps the weekday the same, although the calendar date may differ. The publication date of a list is also different from the sales week it covers.
 
 ## API key
 
-I never type the key into this document. R reads it from an environment variable called `NYT_API_KEY`. To set it up once:
-
-1. Get a key at <https://developer.nytimes.com> (create an account, create an app, and turn on the **Books API**).
-2. In RStudio run `usethis::edit_r_environ()`, add a line `NYT_API_KEY=your_key_here`, save, and restart R.
-
-The `.gitignore` in this repo also keeps `.Renviron` out of GitHub, just in case.
+The key is stored in `.Renviron` as `NYT_API_KEY` and read with `Sys.getenv()`. It is not included in this document. The `.gitignore` file excludes `.Renviron` from version control.
 
 ```{r setup}
 library(dplyr)
@@ -64,7 +59,7 @@ has_key <- nzchar(api_key)
 has_key
 ```
 
-`has_key` is only `TRUE` or `FALSE`, so nothing secret gets printed. If it's `FALSE`, the report can still run from the JSON files saved in `data/` (see below).
+`has_key` shows whether R found the key without displaying it. Once both JSON files are saved, the report can run without the key.
 
 ## Making the request
 
@@ -140,11 +135,11 @@ invisible(validate_list(read_file(cache_path(published_then)), published_then))
 c(latest_snapshot = published_now, year_earlier = published_then)
 ```
 
-The raw JSON for both weeks is saved in `data/`. By default, subsequent renders reuse the saved snapshot, including when a key is available. To fetch a newer snapshot intentionally, set `refresh_data: true` in the YAML parameters, render once, then set it back to `false`. Once those files are committed, anyone can re-render this report without an API key, and I don't hit NYT's servers again each time I re-render.
+The responses are saved in `data/`, and later renders reuse those files. To update the comparison, I can set `refresh_data: true` at the top of the document, render, and change it back to `false`. Both JSON files should be included with the report so the results can be reproduced without a key.
 
 ## Parsing the JSON and cleaning it
 
-`fromJSON()` turns the response into nested R lists. The part I need is `results$books`, an array of book objects, which `fromJSON()` automatically turns into a data frame.
+`fromJSON()` reads the response. The book records are in `results$books`; I convert these to a tibble and keep the columns used below.
 
 ```{r tidy}
 tidy_list <- function(date) {
@@ -174,11 +169,11 @@ books_now |> select(rank, title, author, weeks_on_list)
 
 ### Cleaning decisions
 
-- **Nested fields.** Each book has a few nested pieces (`isbns` and `buy_links` are lists inside the data frame). I don't need them, since `primary_isbn13` already has the ISBN, so I dropped them with `select()` instead of unnesting them.
-- **Empty strings.** The API sends `""` instead of leaving a field out when it has nothing to say, for example a missing description. I turned those into proper `NA` values so R's missing-value tools work on them.
-- **Titles and ISBNs.** I preserve title capitalization as supplied by NYT and keep ISBNs as character identifiers, rather than treating them as numbers.
-- **Only the fields I need.** The assignment says to return a clean data frame, so I kept eight columns plus the date.
-- **Checks.** `stopifnot()` stops the report if a column I rely on ever disappears from the API's response.
+- I keep the rank, previous rank, weeks on the list, title, author, publisher, description, and primary ISBN, plus the list date.
+- I leave out nested fields such as `isbns` and `buy_links` because this comparison does not use them.
+- I remove extra spaces and replace empty text with `NA`.
+- I keep the original title capitalization and treat ISBNs as text.
+- The checks below catch empty lists, duplicate or missing ranks, and missing or negative week counts.
 
 ```{r checks}
 stopifnot(nrow(books_now) > 0, nrow(books_then) > 0)
@@ -199,7 +194,7 @@ nrow(both)
 
 ## Analysis
 
-The question is whether the list is mostly long-running books or mostly newer arrivals. I'm counting a book as **long-running** if it has been on the list 10 or more weeks and as a **recent arrival** if it has been on 2 weeks or fewer. Books with 3-9 weeks fall between these categories. These cutoffs describe time on the list, not the publication age of a book, and the numbers depend on them.
+For this comparison, I call books with at least **10 weeks** on the list long-running entries, and books with **2 weeks or fewer** recent arrivals. Books with 3-9 weeks fall in between. These are working definitions for this report. They describe time on the list, not how recently a book was published.
 
 ```{r compare}
 compare <- both |>
@@ -226,7 +221,7 @@ books_now |>
   knitr::kable()
 ```
 
-That's the top five of this week's list.
+The table above shows the five highest-ranked books in the latest saved list.
 
 ```{r longest}
 both |>
@@ -237,7 +232,7 @@ both |>
   knitr::kable()
 ```
 
-And these are the three longest-running books on each list.
+The next chart shows weeks on the list for every book, ordered by rank within each week.
 
 ```{r plot, fig.height=8, fig.width=12}
 plot_data <- both |>
@@ -266,17 +261,17 @@ top1     <- books_now |> slice_min(rank, n = 1)
 
 ## Conclusions
 
-For the saved latest snapshot published **`r published_now`**, the median book had been on the list for **`r now_row$median_weeks` weeks**, and **`r now_row$long_running` of `r now_row$books`** books were long-running (10+ weeks), while **`r now_row$recent_arrivals`** were recent arrivals (2 weeks or fewer). The longest-running title had been on the list for **`r now_row$longest_run` weeks**. The number-one book was *`r top1$title`* by `r top1$author`.
+On the list dated **`r published_now`**, the median book had been on the list for **`r now_row$median_weeks` weeks**, and **`r now_row$long_running` of `r now_row$books`** books were long-running (10+ weeks), while **`r now_row$recent_arrivals`** were recent arrivals (2 weeks or fewer). The longest-running title had been on the list for **`r now_row$longest_run` weeks**. The number-one book was *`r top1$title`* by `r top1$author`.
 
-A year earlier (**`r published_then`**) the median was **`r then_row$median_weeks` weeks**, with **`r then_row$long_running`** long-running books and **`r then_row$recent_arrivals`** recent arrivals. So this week's list has a **`r if (now_row$median_weeks > then_row$median_weeks) "higher" else if (now_row$median_weeks < then_row$median_weeks) "lower" else "similar"`** median time on the list than the same week a year ago.
+A year earlier (**`r published_then`**) the median was **`r then_row$median_weeks` weeks**, with **`r then_row$long_running`** long-running books and **`r then_row$recent_arrivals`** recent arrivals. The latest list therefore has a **`r if (now_row$median_weeks > then_row$median_weeks) "higher" else if (now_row$median_weeks < then_row$median_weeks) "lower" else "similar"`** median time on the list than the same week a year ago.
 
-A few honest limits on what this shows:
+This comparison has a few limits:
 
-- It's **two snapshots**, one week each. Best-seller lists swing a lot from week to week, for example around holidays or when a big author releases a book, so two weeks can't show a real trend.
-- **"Weeks on list" is whatever NYT reports.** I didn't check how they count weeks, so I stuck to broad cutoffs (10+ and 2 or fewer) instead of anything exact.
-- It's one list. Hardcover Fiction may behave very differently from Nonfiction or the Young Adult lists.
+- Two weekly lists are not enough to establish a trend. A new release or holiday could change the mix.
+- The analysis uses the weeks reported by NYT. It does not establish whether those weeks were consecutive.
+- The findings apply to Hardcover Fiction. Other lists may look different.
 
-To take this further, I'd pull many weeks in a row (the API allows it, within the rate limits) and plot the median weeks on list over time, and then repeat it for a few other lists.
+A useful next step would be to collect several months of lists and see whether the same pattern holds.
 
 ## References
 
@@ -285,4 +280,4 @@ To take this further, I'd pull many weeks in a row (the API allows it, within th
 
 ## AI Use and draft assistance
 
-This report builds on a draft supplied by a collaborator. The supplied draft disclosed assistance from Claude with planning, code, and writing. ChatGPT helped revise the caching, response validation, chart ordering, and explanations. The final data and conclusions are calculated by the R code from the NYT responses, rather than supplied by an AI model.
+I started with a draft from a collaborator that included Claude assistance with planning, code, and writing. ChatGPT helped revise the code and explanations and edit the wording. The tables and numerical results come from running the R code on the NYT responses.
