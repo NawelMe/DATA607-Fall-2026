@@ -13,5 +13,6 @@ I used the NYT Books API to compare Hardcover Fiction best-seller lists from Nov
 
 My vignette uses `tidyr::complete()` to add missing fish-station combinations and calculate detection proportions. It includes annotated code, summaries, and a plot using the built-in `fish_encounters` dataset.
 
+- [Published Tidyverse vignette on RPubs](https://rpubs.com/NoelleMe/1473094)
 - [Submitted vignette](https://github.com/NawelMe/fall2027-data607-tidyverse-assignment/blob/main/noelle_m_tidyr_complete.qmd)
 - [Class pull request #6](https://github.com/DW8888/fall2027-data607-tidyverse-assignment/pull/6)
