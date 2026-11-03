@@ -1,0 +1,8 @@
+.Renviron
+.Rhistory
+.Rproj.user/
+.httr-oauth
+.DS_Store
+.quarto/
+*.html
+*_files/

@@ -1,0 +1,288 @@
+---
+title: "Week 9: Using the New York Times Books API in R"
+author: "Noelle Messaoudi"
+date: today
+params:
+  refresh_data: false
+format:
+  html:
+    toc: true
+    code-fold: true
+    theme: flatly
+    embed-resources: true
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+## Introduction
+
+For this assignment I'm using the New York Times Books API to look at the Hardcover Fiction best-seller list. The question I want to answer is simple: is this week's list mostly books that have been around for a long time, or mostly newer arrivals, and is that different from the same week a year ago? I'll send a request to the API, turn the JSON that comes back into a clean data frame, and compare the two weeks.
+
+## Approach
+
+First I will make an API key on the NYT developer site and store it as an environment variable, so it never shows up in my code or on GitHub. Then I'll write a small function that asks the Books API for the Hardcover Fiction list on a given date, checks that the request worked, and saves the raw JSON in the `data/` folder. I'll make two requests, one for the current week and one for the same week a year earlier. After that I'll parse the JSON, clean it into a tidy table with one row per book, and compare the two weeks: how long the books have been on the list, who's at the top, and which titles are the longest-running. I'll finish by writing up what I found and what the data can't tell me.
+
+## The API
+
+- **API:** NYT Books API, version 3 (<https://developer.nytimes.com/docs/books-product/1/overview>)
+- **Endpoint:** `GET https://api.nytimes.com/svc/books/v3/lists/{date}/{list}.json`
+- **What it does:** returns one best-seller list for one week. Each book comes with its rank, last week's rank, how many weeks it's been on the list, the title, author, publisher, a short description, and ISBNs.
+- **Why this endpoint:** it takes a date, so I can ask for the current week and for the same week a year ago, and it returns one list in full with the "weeks on list" number for every book, which is what my question needs.
+
+## The requests
+
+| Parameter | Value | Where it goes |
+|---|---|---|
+| `date` | `current`, then the same week one year earlier (`YYYY-MM-DD`) | in the URL path |
+| `list` | `hardcover-fiction` | in the URL path |
+| `api-key` | my key, read from the `NYT_API_KEY` environment variable | in the query string |
+
+The comparison uses the publication date returned by the API, rather than the date I run this document. I subtract 364 days (52 weeks) to compare the same weekday approximately one year earlier. This is not necessarily the same calendar date. The list publication date also differs from the sales week represented by the list.
+
+## API key
+
+I never type the key into this document. R reads it from an environment variable called `NYT_API_KEY`. To set it up once:
+
+1. Get a key at <https://developer.nytimes.com> (create an account, create an app, and turn on the **Books API**).
+2. In RStudio run `usethis::edit_r_environ()`, add a line `NYT_API_KEY=your_key_here`, save, and restart R.
+
+The `.gitignore` in this repo also keeps `.Renviron` out of GitHub, just in case.
+
+```{r setup}
+library(dplyr)
+library(tidyr)
+library(readr)
+library(stringr)
+library(ggplot2)
+library(httr)        # GET(), status_code(), content()
+library(jsonlite)    # fromJSON()
+
+api_key <- Sys.getenv("NYT_API_KEY")
+has_key <- nzchar(api_key)
+has_key
+```
+
+`has_key` is only `TRUE` or `FALSE`, so nothing secret gets printed. If it's `FALSE`, the report can still run from the JSON files saved in `data/` (see below).
+
+## Making the request
+
+```{r request}
+cache_path <- function(date) {
+  file.path("data", paste0("nyt_hardcover-fiction_", date, ".json"))
+}
+
+validate_list <- function(txt, expected_date = NULL) {
+  parsed <- tryCatch(fromJSON(txt), error = function(e) {
+    stop("The response is not valid JSON.", call. = FALSE)
+  })
+  result <- parsed$results
+  if (!identical(parsed$status, "OK") || !is.list(result) ||
+      !identical(result$list_name, "Hardcover Fiction") ||
+      !is.data.frame(result$books) || nrow(result$books) == 0) {
+    stop("Expected a nonempty Hardcover Fiction response.", call. = FALSE)
+  }
+  published <- result$published_date
+  if (length(published) != 1L || is.na(published) ||
+      !grepl("^[0-9]{4}-[0-9]{2}-[0-9]{2}$", published) ||
+      is.na(as.Date(published))) {
+    stop("The response has no valid publication date.", call. = FALSE)
+  }
+  if (!is.null(expected_date) && published != expected_date) {
+    stop("The returned publication date does not match the requested week.",
+         call. = FALSE)
+  }
+  parsed
+}
+
+# Return only JSON, never the response object or a URL containing the key.
+request_list <- function(date) {
+  if (!has_key) stop("Set NYT_API_KEY in .Renviron first.", call. = FALSE)
+  url <- paste0("https://api.nytimes.com/svc/books/v3/lists/",
+                date, "/hardcover-fiction.json")
+  resp <- tryCatch(
+    GET(url, query = list(`api-key` = api_key), timeout(30)),
+    error = function(e) stop("NYT request failed. Check your connection and retry.",
+                             call. = FALSE)
+  )
+  if (status_code(resp) != 200L) {
+    stop("NYT returned HTTP ", status_code(resp),
+         ". Check the Books API subscription/key or retry later.", call. = FALSE)
+  }
+  txt <- content(resp, as = "text", encoding = "UTF-8")
+  validate_list(txt, if (date == "current") NULL else date)
+  Sys.sleep(12) # Space requests conservatively; account quotas still apply.
+  txt
+}
+
+dir.create("data", showWarnings = FALSE)
+saved <- sort(list.files("data",
+  pattern = "^nyt_hardcover-fiction_[0-9]{4}-[0-9]{2}-[0-9]{2}\\.json$"))
+
+# Reuse the saved snapshot even when a key is present.
+# Set params.refresh_data to true only when intentionally updating the analysis.
+if (length(saved) > 0L && !isTRUE(params$refresh_data)) {
+  latest_file <- file.path("data", tail(saved, 1))
+  published_now <- validate_list(read_file(latest_file))$results$published_date
+  stopifnot(basename(latest_file) == basename(cache_path(published_now)))
+} else {
+  current_txt <- request_list("current")
+  published_now <- validate_list(current_txt)$results$published_date
+  write_file(current_txt, cache_path(published_now))
+}
+
+published_then <- as.character(as.Date(published_now) - 364)
+if (!file.exists(cache_path(published_then))) {
+  write_file(request_list(published_then), cache_path(published_then))
+}
+invisible(validate_list(read_file(cache_path(published_then)), published_then))
+c(latest_snapshot = published_now, year_earlier = published_then)
+```
+
+The raw JSON for both weeks is saved in `data/`. By default, subsequent renders reuse the saved snapshot, including when a key is available. To fetch a newer snapshot intentionally, set `refresh_data: true` in the YAML parameters, render once, then set it back to `false`. Once those files are committed, anyone can re-render this report without an API key, and I don't hit NYT's servers again each time I re-render.
+
+## Parsing the JSON and cleaning it
+
+`fromJSON()` turns the response into nested R lists. The part I need is `results$books`, an array of book objects, which `fromJSON()` automatically turns into a data frame.
+
+```{r tidy}
+tidy_list <- function(date) {
+  parsed <- validate_list(read_file(cache_path(date)), date)
+  books  <- as_tibble(parsed$results$books)
+
+  # The columns I need. Everything else (cover image links, review links,
+  # the nested isbns and buy_links lists) gets dropped.
+  needed <- c("rank", "rank_last_week", "weeks_on_list", "title", "author",
+              "publisher", "description", "primary_isbn13")
+  stopifnot(all(needed %in% names(books)))
+
+  books |>
+    select(all_of(needed)) |>
+    mutate(
+      published_date = as.Date(parsed$results$published_date),
+      across(where(is.character), \(x) na_if(str_squish(x), "")) # "" -> NA
+    ) |>
+    relocate(published_date)
+}
+
+books_now  <- tidy_list(published_now)
+books_then <- tidy_list(published_then)
+
+books_now |> select(rank, title, author, weeks_on_list)
+```
+
+### Cleaning decisions
+
+- **Nested fields.** Each book has a few nested pieces (`isbns` and `buy_links` are lists inside the data frame). I don't need them, since `primary_isbn13` already has the ISBN, so I dropped them with `select()` instead of unnesting them.
+- **Empty strings.** The API sends `""` instead of leaving a field out when it has nothing to say, for example a missing description. I turned those into proper `NA` values so R's missing-value tools work on them.
+- **Titles and ISBNs.** I preserve title capitalization as supplied by NYT and keep ISBNs as character identifiers, rather than treating them as numbers.
+- **Only the fields I need.** The assignment says to return a clean data frame, so I kept eight columns plus the date.
+- **Checks.** `stopifnot()` stops the report if a column I rely on ever disappears from the API's response.
+
+```{r checks}
+stopifnot(nrow(books_now) > 0, nrow(books_then) > 0)
+stopifnot(!anyDuplicated(books_now$rank), !anyDuplicated(books_then$rank))
+stopifnot(is.numeric(books_now$weeks_on_list), is.numeric(books_then$weeks_on_list))
+stopifnot(!anyNA(books_now$rank), !anyNA(books_then$rank))
+stopifnot(!anyNA(books_now$weeks_on_list), !anyNA(books_then$weeks_on_list))
+stopifnot(all(books_now$weeks_on_list >= 0), all(books_then$weeks_on_list >= 0))
+
+both <- bind_rows(
+  books_now  |> mutate(week = "This week"),
+  books_then |> mutate(week = "A year earlier")
+) |>
+  mutate(week = factor(week, levels = c("This week", "A year earlier")))
+
+nrow(both)
+```
+
+## Analysis
+
+The question is whether the list is mostly long-running books or mostly newer arrivals. I'm counting a book as **long-running** if it has been on the list 10 or more weeks and as a **recent arrival** if it has been on 2 weeks or fewer. Books with 3-9 weeks fall between these categories. These cutoffs describe time on the list, not the publication age of a book, and the numbers depend on them.
+
+```{r compare}
+compare <- both |>
+  summarise(
+    books            = n(),
+    median_weeks     = median(weeks_on_list, na.rm = TRUE),
+    longest_run      = max(weeks_on_list, na.rm = TRUE),
+    long_running     = sum(weeks_on_list >= 10, na.rm = TRUE),
+    recent_arrivals  = sum(weeks_on_list <= 2, na.rm = TRUE),
+    .by = week
+  )
+
+compare |>
+  rename(Week = week, Books = books, `Median weeks on list` = median_weeks,
+         `Longest run (weeks)` = longest_run, `Long-running (10+ weeks)` = long_running,
+         `Recent arrivals (2 or fewer)` = recent_arrivals) |>
+  knitr::kable()
+```
+
+```{r top5}
+books_now |>
+  slice_min(rank, n = 5) |>
+  select(Rank = rank, Title = title, Author = author, `Weeks on list` = weeks_on_list) |>
+  knitr::kable()
+```
+
+That's the top five of this week's list.
+
+```{r longest}
+both |>
+  group_by(week) |>
+  slice_max(weeks_on_list, n = 3, with_ties = FALSE) |>
+  ungroup() |>
+  select(Week = week, Title = title, Author = author, `Weeks on list` = weeks_on_list) |>
+  knitr::kable()
+```
+
+And these are the three longest-running books on each list.
+
+```{r plot, fig.height=8, fig.width=12}
+plot_data <- both |>
+  arrange(week, desc(rank)) |>
+  mutate(
+    plot_id = paste(week, rank, sep = "::"),
+    plot_id = factor(plot_id, levels = unique(plot_id)),
+    label = str_wrap(paste0(rank, ". ", title), width = 30)
+  )
+
+ggplot(plot_data, aes(x = weeks_on_list, y = plot_id)) +
+  scale_y_discrete(labels = setNames(plot_data$label, plot_data$plot_id)) +
+  geom_col(fill = "#1F4E79") +
+  facet_wrap(~ week, scales = "free_y") +
+  labs(title = "Weeks on the NYT Hardcover Fiction list, by book",
+       subtitle = "Books ordered by rank (rank 1 at the top)",
+       x = "Weeks on list", y = NULL) +
+  theme_minimal()
+```
+
+```{r numbers}
+now_row  <- compare |> filter(week == "This week")
+then_row <- compare |> filter(week == "A year earlier")
+top1     <- books_now |> slice_min(rank, n = 1)
+```
+
+## Conclusions
+
+For the saved latest snapshot published **`r published_now`**, the median book had been on the list for **`r now_row$median_weeks` weeks**, and **`r now_row$long_running` of `r now_row$books`** books were long-running (10+ weeks), while **`r now_row$recent_arrivals`** were recent arrivals (2 weeks or fewer). The longest-running title had been on the list for **`r now_row$longest_run` weeks**. The number-one book was *`r top1$title`* by `r top1$author`.
+
+A year earlier (**`r published_then`**) the median was **`r then_row$median_weeks` weeks**, with **`r then_row$long_running`** long-running books and **`r then_row$recent_arrivals`** recent arrivals. So this week's list has a **`r if (now_row$median_weeks > then_row$median_weeks) "higher" else if (now_row$median_weeks < then_row$median_weeks) "lower" else "similar"`** median time on the list than the same week a year ago.
+
+A few honest limits on what this shows:
+
+- It's **two snapshots**, one week each. Best-seller lists swing a lot from week to week, for example around holidays or when a big author releases a book, so two weeks can't show a real trend.
+- **"Weeks on list" is whatever NYT reports.** I didn't check how they count weeks, so I stuck to broad cutoffs (10+ and 2 or fewer) instead of anything exact.
+- It's one list. Hardcover Fiction may behave very differently from Nonfiction or the Young Adult lists.
+
+To take this further, I'd pull many weeks in a row (the API allows it, within the rate limits) and plot the median weeks on list over time, and then repeat it for a few other lists.
+
+## References
+
+- The New York Times. [Books API specification](https://github.com/nytimes/public_api_specs/blob/master/books_api/books_api.yaml).
+- The New York Times. [Developer portal](https://developer.nytimes.com/).
+
+## AI Use and draft assistance
+
+This report builds on a draft supplied by a collaborator. The supplied draft disclosed assistance from Claude with planning, code, and writing. ChatGPT helped revise the caching, response validation, chart ordering, and explanations. The final data and conclusions are calculated by the R code from the NYT responses, rather than supplied by an AI model.
