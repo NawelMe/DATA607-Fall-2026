@@ -1,0 +1,49 @@
+---
+title: "NY Times API Assignment: Approach"
+author: "Noelle Messaoudi"
+date: 10/30/2026
+format:
+  html:
+    embed-resources: true
+---
+
+## Research question
+
+Does the latest New York Times Hardcover Fiction best-seller list contain more recent arrivals or more books that have stayed on the list for several weeks? How does this compare with the list from 52 weeks earlier?
+
+## API and request
+
+I will use the NYT Books API in R. This endpoint returns a best-seller list for a selected date:
+
+`GET https://api.nytimes.com/svc/books/v3/lists/{date}/hardcover-fiction.json`
+
+The first request uses `current` as the date. For the second request, I subtract 364 days from the publication date returned in the first response. This keeps the weekday the same, although it may differ from the exact calendar date a year earlier.
+
+The list is `hardcover-fiction`, and the `api-key` query parameter reads the key from the `NYT_API_KEY` environment variable. The key stays in a private `.Renviron` file and is not included in the report or on GitHub.
+
+## Working with the data
+
+I will use `httr::GET()` to request the data and check the response status. I will save the JSON responses in a `data` folder so the report can reuse the same lists without making new requests.
+
+I will read the responses with `jsonlite::fromJSON()` and convert `results$books` into a tibble. Each row will represent one book on one dated list.
+
+The table will include rank, previous rank, weeks on the list, title, author, publisher, description, primary ISBN, and the list publication date. I will remove extra spaces, replace empty strings with `NA`, and keep ISBNs as text. Nested fields such as additional ISBNs and purchase links are not needed for this comparison. I will also check for empty lists, duplicate ranks, and missing or negative week counts.
+
+## Comparing the lists
+
+For each week, I will calculate the median weeks on the list and count books in two groups:
+
+- Recent arrivals: two weeks or fewer.
+- Long-running entries: ten weeks or more.
+
+Books with three to nine weeks will fall between these groups. These definitions describe time on the list, not the age of a book.
+
+I will show the five highest-ranked books, compare the longest-running entries, and make a bar chart of weeks on the list. The conclusion will state which group is larger, whether it forms a majority, and whether the two weeks differ.
+
+## Limits
+
+Two lists can show a difference between weeks, but they cannot establish a trend. The results apply only to Hardcover Fiction, and weeks on the list do not measure the number of copies sold.
+
+## Assistance
+
+This approach follows the report developed from a collaborator draft that included Claude assistance. ChatGPT helped organize and edit this explanation.
