@@ -1,7 +1,7 @@
 ---
 title: "Week 9: Using the New York Times Books API in R"
 author: "Noelle Messaoudi"
-date: today
+date: 10/30/2026
 params:
   refresh_data: false
 format:
@@ -264,6 +264,8 @@ top1     <- books_now |> slice_min(rank, n = 1)
 On the list dated **`r published_now`**, the median book had been on the list for **`r now_row$median_weeks` weeks**, and **`r now_row$long_running` of `r now_row$books`** books were long-running (10+ weeks), while **`r now_row$recent_arrivals`** were recent arrivals (2 weeks or fewer). The longest-running title had been on the list for **`r now_row$longest_run` weeks**. The number-one book was *`r top1$title`* by `r top1$author`.
 
 A year earlier (**`r published_then`**) the median was **`r then_row$median_weeks` weeks**, with **`r then_row$long_running`** long-running books and **`r then_row$recent_arrivals`** recent arrivals. The latest list therefore has a **`r if (now_row$median_weeks > then_row$median_weeks) "higher" else if (now_row$median_weeks < then_row$median_weeks) "lower" else "similar"`** median time on the list than the same week a year ago.
+
+In the latest list, recent arrivals account for **`r now_row$recent_arrivals` of `r now_row$books` books**, compared with **`r now_row$long_running`** long-running entries. Recent arrivals therefore make up `r if (now_row$recent_arrivals > now_row$long_running) "a larger" else if (now_row$recent_arrivals < now_row$long_running) "a smaller" else "the same"` group. `r if (now_row$recent_arrivals > now_row$books / 2) "They also form a majority of the list." else "They do not form a majority of the list."` The two weeks have `r if (now_row$recent_arrivals == then_row$recent_arrivals && now_row$long_running == then_row$long_running) "the same counts in these two categories" else "different counts in at least one of these two categories"`. The longest time on the list is **`r now_row$longest_run` weeks** in the latest week, compared with **`r then_row$longest_run` weeks** a year earlier.
 
 This comparison has a few limits:
 
