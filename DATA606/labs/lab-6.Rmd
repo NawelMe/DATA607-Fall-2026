@@ -1,0 +1,161 @@
+---
+title: "DATA 606 | Lab 6 · Inference for categorical data"
+output:
+  html_document:
+    toc: true
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE)
+library(infer)
+data("yrbss", package = "openintro")
+set.seed(1234)
+alpha <- 0.05
+pct <- function(x) sprintf("%.2f%%", 100 * x)
+boot_summary <- function(event, outcome) {
+  d <- data.frame(response = ifelse(event, "yes", "no"))
+  d <- d[!is.na(d$response), , drop = FALSE]
+  ci <- d |>
+    specify(response = response, success = "yes") |>
+    generate(reps = 5000, type = "bootstrap") |>
+    calculate(stat = "prop") |>
+    get_confidence_interval(level = 0.95)
+  data.frame(outcome, n = nrow(d), estimate = mean(d$response == "yes"),
+             lower = ci[[1]], upper = ci[[2]],
+             margin = (ci[[2]] - ci[[1]]) / 2)
+}
+```
+
+## 1. Texting while driving
+
+```{r}
+table(yrbss$text_while_driving_30d, useNA = "ifany")
+```
+
+Each count corresponds to a reported category. Missing responses are listed
+separately from the reported categories.
+
+## 2–3. Daily texting among students who never wear a helmet
+
+```{r}
+no_helmet <- subset(yrbss, helmet_12m == "never")
+text_ci <- boot_summary(no_helmet$text_while_driving_30d == "30",
+                        "Daily texting among non-helmet wearers")
+text_ci
+```
+
+**2.** The conditional sample proportion is `r pct(text_ci$estimate)`, using
+students who answered the texting question and said they never wear a helmet.
+
+**3.** The approximate 95% margin of error is
+`r sprintf("%.2f", 100 * text_ci$margin)` percentage points, using half the
+width of the bootstrap percentile interval. The interval runs from
+`r pct(text_ci$lower)` to `r pct(text_ci$upper)`.
+
+## 4. Two other categorical outcomes
+
+```{r}
+active_ci <- boot_summary(yrbss$physically_active_7d == 7,
+                          "Physically active on all seven days")
+sleep_ci <- boot_summary(yrbss$school_night_hours_sleep == "10+",
+                         "Ten or more hours of school-night sleep")
+rbind(active_ci, sleep_ci)
+```
+
+For daily physical activity, the 95% interval is `r pct(active_ci$lower)` to
+`r pct(active_ci$upper)`, with an approximate margin of
+`r sprintf("%.2f", 100 * active_ci$margin)` percentage points. For reporting
+at least ten hours of school-night sleep, the interval is
+`r pct(sleep_ci$lower)` to `r pct(sleep_ci$upper)`, with a margin of
+`r sprintf("%.2f", 100 * sleep_ci$margin)` percentage points. These are
+unweighted estimates for the corresponding student proportions under the
+lab's independent-sampling approximation.
+
+## 5. Margin of error versus population proportion
+
+```{r}
+p <- seq(0, 1, by = 0.01)
+margin <- function(p, n) qnorm(0.975) * sqrt(p * (1 - p) / n)
+plot(p, margin(p, 1000), type = "l", xlab = "Population proportion",
+     ylab = "95% margin of error", main = "Fixed sample size of 1,000")
+abline(v = 0.5, lty = 2)
+```
+
+The margin of error increases to a maximum at 0.50 and then decreases
+symmetrically, since the product of p and 1 minus p is greatest there.
+
+## 6–8. Sampling distributions
+
+```{r}
+sim_prop <- function(n, p) rbinom(5000, n, p) / n
+settings <- data.frame(n = c(300, 300, 300, 30, 1000),
+                       p = c(0.1, 0.01, 0.5, 0.1, 0.1))
+par(mfrow = c(2, 3))
+for (i in seq_len(nrow(settings))) {
+  x <- sim_prop(settings$n[i], settings$p[i])
+  hist(x, breaks = 15, xlab = "Sample proportion",
+       main = paste("n =", settings$n[i], "| p =", settings$p[i]))
+}
+par(mfrow = c(1, 1))
+transform(settings, standard_error = sqrt(p * (1 - p) / n))
+```
+
+**6.** With n = 300 and p = 0.10 the center is 0.10, the standard error
+is about 0.0173 and the shape is roughly bell-shaped with some right skew.
+
+**7.** Holding n fixed, the center tracks p. Spread increases toward p = 0.5.
+Near 0 or 1 the distribution has less spread and can be visibly skewed.
+
+**8.** Holding p fixed, larger samples tighten the distribution around p
+and generally make its shape more nearly normal.
+
+## 9. Sleep and daily strength training
+
+Let p1 and p2 be the proportions who strength train every day among students
+reporting 10+ hours and under 10 hours of sleep, respectively.
+Test H0: p1 = p2 versus HA: p1 > p2 at alpha = 0.05.
+
+```{r}
+sleep_train <- with(yrbss, table(
+  sleep = factor(ifelse(school_night_hours_sleep == "10+", "10+", "under 10"),
+                 levels = c("10+", "under 10")),
+  training = factor(ifelse(strength_training_7d == 7, "daily", "other"),
+                    levels = c("daily", "other"))))
+sleep_train
+training_test <- if (all(sleep_train >= 10)) {
+  prop.test(sleep_train, alternative = "greater", correct = FALSE)
+} else {
+  fisher.test(sleep_train, alternative = "greater")
+}
+training_test
+two_sided_ci <- if (training_test$p.value < alpha && all(sleep_train >= 10)) {
+  prop.test(sleep_train, correct = FALSE)$conf.int
+}
+if (!is.null(two_sided_ci)) two_sided_ci
+```
+
+Each student contributes to one cell, and the groups are disjoint. The table
+checks the success and failure counts. The two-proportion approximation is used
+when all four counts are at least ten, with an exact test available otherwise.
+The dataset does not supply school cluster or survey weight information for
+the lab calculation, so this analysis uses the independent-student approximation.
+The one-sided p-value is `r format.pval(training_test$p.value, digits = 3)`.
+At 0.05 there is `r if (training_test$p.value < alpha) "evidence" else "insufficient evidence"`
+that the 10+ hour group is more likely to strength train every day.
+`r if (!is.null(two_sided_ci)) paste("The two-sided 95% interval for the difference is", paste(pct(two_sided_ci), collapse = " to "), "(10+ hours minus under 10 hours).") else ""`
+
+## 10. Type I error
+
+At a 0.05 significance level, the nominal probability of detecting a difference
+when the null hypothesis is true is 5%.
+
+## 11. Sample size for weekly service attendance
+
+```{r}
+ceiling(qnorm(0.975)^2 * 0.5 * (1 - 0.5) / 0.01^2)
+```
+
+Use p = 0.5 for the most conservative calculation. A simple random sample
+of at least 9,604 residents meets the stated margin-of-error target.
+

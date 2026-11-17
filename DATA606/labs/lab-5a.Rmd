@@ -1,0 +1,126 @@
+---
+title: "DATA 606 | Lab 5A · Sampling distributions"
+output:
+  html_document:
+    toc: true
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE)
+set.seed(1234)
+population <- rep(c("Benefits", "Doesn't benefit"), c(80000, 20000))
+sample_props <- function(n, repetitions, response) {
+  replicate(repetitions, mean(sample(population, n, replace = TRUE) == response))
+}
+pct <- function(x) sprintf("%.1f%%", 100 * x)
+```
+
+## 1. First sample
+
+```{r}
+samp1 <- sample(population, 50)
+rbind(Population = prop.table(table(population)),
+      Sample = prop.table(table(factor(samp1, levels = unique(population)))))
+```
+
+The population is 80% “Benefits” and 20% “Doesn't benefit.” The first sample gives
+`r pct(mean(samp1 == "Benefits"))` and `r pct(mean(samp1 == "Doesn't benefit"))`,
+respectively. The sample has sampling variability because it contains only 50 responses.
+
+## 2. Comparing students' samples
+
+Two students taking separate random samples can get different proportions. For samples
+of 50, the standard error is about 0.057, so differences of several percentage points
+are plausible. This describes the expected comparison without assuming a classmate's result.
+
+## 3. Second sample
+
+```{r}
+samp2 <- sample(population, 50)
+p1 <- mean(samp1 == "Doesn't benefit")
+p2 <- mean(samp2 == "Doesn't benefit")
+c(first = p1, second = p2, difference = p2 - p1)
+```
+
+The signed difference (second minus first) is `r sprintf("%.1f", 100 * (p2 - p1))` percentage points.
+A sample of 1,000 should estimate the population proportion more precisely than a
+sample of 100 because the standard error decreases with sample size.
+
+## 4. Sampling distribution for 50 responses
+
+```{r}
+sample_props50 <- sample_props(50, 15000, "Doesn't benefit")
+hist(sample_props50, breaks = seq(-0.01, 1.01, by = 0.02),
+     xlim = c(0, 0.5), xlab = "Sample proportion",
+     main = "15,000 samples of 50")
+abline(v = 0.2, lty = 2)
+```
+
+There are `r length(sample_props50)` proportions. The distribution is unimodal
+and approximately bell-shaped, with a slight right skew. Its center is approximately
+`r round(mean(sample_props50), 3)`, close to 0.20.
+
+## 5. Twenty-five samples of 10
+
+```{r}
+sample_props_small <- data.frame(
+  replicate = seq_len(25),
+  p_hat = sample_props(10, 25, "Doesn't benefit")
+)
+sample_props_small
+```
+
+There are 25 rows. Each gives the fraction of 10 responses in one resample
+that said the work does not benefit them. Samples with zero such responses are included.
+
+## 6. Sample size and simulation count
+
+```{r}
+summarize_simulation <- function(n, repetitions) {
+  x <- sample_props(n, repetitions, "Doesn't benefit")
+  data.frame(n, repetitions, center = mean(x), standard_error = sd(x))
+}
+do.call(rbind, lapply(c(10, 50, 100), summarize_simulation, repetitions = 5000))
+summarize_simulation(50, 20000)
+```
+
+Each simulated point is one sample proportion. The center stays close to 0.20.
+The standard error decreases as the sample size grows, and the distribution
+becomes less discrete and more nearly symmetric. More repetitions make the
+simulation estimates steadier. The theoretical standard error stays the same
+for a fixed sample size.
+
+## 7. Point estimate for “Benefits”
+
+```{r}
+samp15 <- sample(population, 15)
+mean(samp15 == "Benefits")
+```
+
+The best point estimate from this one sample is
+`r pct(mean(samp15 == "Benefits"))`.
+
+## 8–10. Sampling distributions for “Benefits”
+
+```{r}
+sample_props15 <- sample_props(15, 2000, "Benefits")
+sample_props150 <- sample_props(150, 2000, "Benefits")
+hist(sample_props15, breaks = seq(-0.5, 15.5) / 15, xlim = c(0.4, 1),
+     xlab = "Sample proportion", main = "2,000 samples of 15")
+hist(sample_props150, breaks = 20, xlim = c(0.4, 1),
+     xlab = "Sample proportion", main = "2,000 samples of 150")
+rbind(n15 = c(center = mean(sample_props15), spread = sd(sample_props15)),
+      n150 = c(center = mean(sample_props150), spread = sd(sample_props150)))
+```
+
+**8.** The size-15 distribution is discrete and left-skewed, with a center near
+`r round(mean(sample_props15), 3)`. The exact population proportion is
+`r pct(mean(population == "Benefits"))`.
+
+**9.** The size-150 distribution is smoother, more symmetric and tighter.
+Its center suggests a population proportion near `r round(mean(sample_props150), 3)`.
+
+**10.** The size-150 distribution has the smaller spread. A smaller spread is
+preferable because estimates are more often close to the population proportion.
+

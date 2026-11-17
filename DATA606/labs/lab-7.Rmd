@@ -1,0 +1,177 @@
+---
+title: "DATA 606 | Lab 7 · Inference for numerical data"
+output:
+  html_document:
+    toc: true
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE)
+data("yrbss", package = "openintro")
+set.seed(1234)
+alpha <- 0.05
+yrbss$physical_3plus <- factor(ifelse(yrbss$physically_active_7d >= 3,
+                                     "3+ days", "0–2 days"),
+                              levels = c("3+ days", "0–2 days"))
+wt <- yrbss[complete.cases(yrbss[, c("weight", "physical_3plus")]), ]
+ht <- yrbss[complete.cases(yrbss[, c("height", "physical_3plus")]), ]
+num <- function(x) formatC(x, digits = 3, format = "f")
+ptext <- function(x) format.pval(x, digits = 3, eps = 0.001)
+ci <- function(test) paste(num(test$conf.int), collapse = " to ")
+```
+
+## 1–2. Cases and missing weights
+
+```{r}
+c(students = nrow(yrbss), missing_weight = sum(is.na(yrbss$weight)))
+```
+
+**1.** Each case is one high-school student who responded to the YRBSS survey.
+There are `r nrow(yrbss)` records.
+
+**2.** There are `r sum(is.na(yrbss$weight))` missing weights.
+
+## 3. Weight by physical activity
+
+```{r}
+boxplot(weight ~ physical_3plus, data = wt, xlab = "Physically active in past week",
+        ylab = "Weight (kg)", main = "Student weight by activity group")
+tapply(wt$weight, wt$physical_3plus, summary)
+weight_means <- tapply(wt$weight, wt$physical_3plus, mean)
+weight_means
+```
+
+The boxes overlap substantially, and both groups have some high observations.
+The 3+ day group's mean is `r num(weight_means[1])` kg and the 0–2 day
+group's mean is `r num(weight_means[2])` kg. I expected considerable overlap:
+weight also varies with age, height and body composition.
+
+## 4–5. Conditions and hypotheses
+
+```{r}
+table(wt$physical_3plus)
+```
+
+**4.** Each respondent contributes one measurement and the groups are
+disjoint. Both groups are large, so the sampling distribution of the
+difference in means should be approximately normal despite right-tail
+observations. Treating responses as independent is a working assumption.
+The lab file lacks the survey design information needed to account for
+possible clustering and to compute weighted national estimates.
+
+**5.** Let the two population means refer to the 3+ day and 0–2 day groups.
+The null is that their mean weights are equal. The two-sided alternative
+is that their mean weights differ.
+
+## 6. Permutation test
+
+```{r}
+weight_gap <- function(group) {
+  mean(wt$weight[group == "3+ days"]) - mean(wt$weight[group == "0–2 days"])
+}
+obs_stat <- weight_gap(wt$physical_3plus)
+null <- replicate(1000, weight_gap(sample(wt$physical_3plus)))
+upper_count <- sum(null >= obs_stat)
+two_sided_count <- sum(abs(null) >= abs(obs_stat))
+p_perm <- (two_sided_count + 1) / (length(null) + 1)
+c(observed_difference = obs_stat, at_least_as_large = upper_count,
+  at_least_as_extreme = two_sided_count, two_sided_p = p_perm)
+hist(null, breaks = 30, xlim = range(c(null, -abs(obs_stat), abs(obs_stat))),
+     xlab = "Permuted mean difference (kg)", main = "Weight permutation test")
+abline(v = c(-abs(obs_stat), abs(obs_stat)), lty = 2)
+```
+
+Of `r length(null)` permutations, `r upper_count` were at least as large
+as the observed statistic. For the two-sided test, `r two_sided_count`
+were at least as extreme in absolute value. With the simulation correction,
+p is `r ptext(p_perm)`. At alpha = 0.05 this is
+`r if (p_perm < alpha) "evidence" else "insufficient evidence"` of a difference
+in mean weights under the lab's assumptions.
+
+## 7. Confidence interval for the mean weight difference
+
+```{r}
+weight_ci <- t.test(weight ~ physical_3plus, data = wt)
+weight_ci
+```
+
+The Welch 95% interval for the difference (3+ days minus 0–2 days) is
+`r ci(weight_ci)` kg. It gives the range of plausible differences in
+average weight under the independent-sampling approximation.
+
+## 8–9. Intervals for mean height
+
+```{r}
+height <- na.omit(yrbss$height)
+height95 <- t.test(height, conf.level = 0.95)
+height90 <- t.test(height, conf.level = 0.90)
+rbind("95%" = height95$conf.int, "90%" = height90$conf.int)
+```
+
+**8.** The 95% interval estimates the mean high-school student height as
+`r ci(height95)` meters under the lab's sampling assumptions.
+
+**9.** The 90% interval is `r ci(height90)` meters. Its width is
+`r num(diff(height90$conf.int))` meters versus
+`r num(diff(height95$conf.int))` meters for the 95% interval.
+A lower confidence level uses a smaller critical value.
+
+## 10. Height by activity group
+
+The null is that mean heights are equal in the two activity groups.
+The alternative is that they differ.
+
+```{r}
+height_test <- t.test(height ~ physical_3plus, data = ht)
+height_test
+```
+
+The two-sided Welch p-value is `r ptext(height_test$p.value)`, and the 95%
+interval for the 3+ day group minus the 0–2 day group is
+`r ci(height_test)` meters. At alpha = 0.05, there is
+`r if (height_test$p.value < alpha) "evidence" else "insufficient evidence"`
+of a difference in mean heights.
+
+## 11. School-day TV response options
+
+```{r}
+tv <- sort(unique(na.omit(as.character(yrbss$hours_tv_per_school_day))))
+tv
+length(tv)
+```
+
+There are `r length(tv)` distinct nonmissing options.
+
+## 12. Sleep and weight
+
+Do students reporting 8 or more hours of sleep on a typical school night
+have a different average weight from students reporting fewer than 8 hours?
+The null is equal means, and the alternative is unequal means. Alpha = 0.05.
+
+```{r}
+sleep <- yrbss[complete.cases(yrbss[, c("school_night_hours_sleep", "weight")]), ]
+sleep$group <- factor(ifelse(sleep$school_night_hours_sleep %in% c("8", "9", "10+"),
+                             "8+ hours", "Under 8 hours"),
+                      levels = c("8+ hours", "Under 8 hours"))
+table(sleep$group)
+boxplot(weight ~ group, data = sleep, xlab = "School-night sleep",
+        ylab = "Weight (kg)", main = "Student weight by sleep group")
+tapply(sleep$weight, sleep$group, mean)
+sleep_test <- t.test(weight ~ group, data = sleep)
+sleep_test
+```
+
+The groups are disjoint and each student contributes one measurement. Both
+group sizes are large enough for a mean-based approximation despite skew and
+outliers. Welch's test allows unequal group variances. School-level dependence
+and nonresponse remain possible, so the inference follows the lab's simple
+sampling approximation.
+
+The estimated difference (8+ hours minus under 8 hours) is
+`r num(unname(diff(rev(sleep_test$estimate))))` kg, with a 95% interval
+from `r ci(sleep_test)` kg and p = `r ptext(sleep_test$p.value)`.
+There is `r if (sleep_test$p.value < alpha) "evidence" else "insufficient evidence"`
+of different average weights for the two sleep groups. The survey comparison
+estimates an association and cannot establish that sleep causes changes in weight.
+

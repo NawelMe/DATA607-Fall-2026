@@ -1,0 +1,130 @@
+---
+title: "DATA 606 | Lab 5B · Confidence intervals"
+output:
+  html_document:
+    toc: true
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE)
+library(infer)
+set.seed(1234)
+p <- 0.62
+population <- rep(c("Yes", "No"), c(62000, 38000))
+samp <- data.frame(climate_change_affects = sample(population, 60))
+p_hat <- mean(samp$climate_change_affects == "Yes")
+boot <- samp |>
+  specify(response = climate_change_affects, success = "Yes") |>
+  generate(reps = 1000, type = "bootstrap") |>
+  calculate(stat = "prop")
+interval <- function(level) get_confidence_interval(boot, level = level)
+ci_text <- function(ci) sprintf("%.1f%% to %.1f%%", 100 * ci[[1]], 100 * ci[[2]])
+captures <- function(ci) ci[[1]] <= p && p <= ci[[2]]
+simulate_intervals <- function(level, n = 60, reps = 1000, trials = 50) {
+  sizes <- rhyper(trials, 62000, 38000, n)
+  # Conditional on the original sample, bootstrap Yes counts are binomial.
+  bounds <- t(vapply(sizes, function(x) {
+    quantile(rbinom(reps, n, x / n) / n, c((1 - level) / 2, (1 + level) / 2))
+  }, numeric(2)))
+  data.frame(low = bounds[, 1], high = bounds[, 2],
+             covers = bounds[, 1] <= p & p <= bounds[, 2])
+}
+show_intervals <- function(result, level) {
+  i <- seq_len(nrow(result))
+  plot(NA, xlim = range(c(result$low, result$high, p)), ylim = range(i),
+       xlab = "Proportion answering Yes", ylab = "Sample number",
+       main = paste0(100 * level, "% bootstrap confidence intervals"))
+  abline(v = p, lty = 2)
+  segments(result$low, i, result$high, i, lwd = ifelse(result$covers, 1, 3))
+}
+```
+
+## 1–2. Point estimate
+
+**1.** `r sprintf("%.1f%%", 100 * p_hat)` of the sample answered Yes.
+
+**2.** Another random sample may yield a different value. The estimates should
+generally be similar because they come from the same population and both use
+60 observations. The theoretical standard error is about 6.3 percentage points.
+
+## 3–5. Interpreting confidence
+
+```{r}
+ci95 <- interval(0.95)
+ci95
+```
+
+**3.** With repeated samples and the same interval construction method, we
+expect about 95% of the intervals to capture the true population proportion.
+
+**4.** My 95% interval is `r ci_text(ci95)`.
+It `r if (captures(ci95)) "contains" else "does not contain"` the true 62%.
+A neighbor's interval can be checked against 0.62 using the same rule.
+
+**5.** We expect approximately 95% coverage because the method is designed for
+that long-run rate. The bootstrap percentile method has approximate coverage.
+
+## 6. Fifty intervals at 95%
+
+```{r}
+run95 <- simulate_intervals(0.95)
+show_intervals(run95, 0.95)
+mean(run95$covers)
+```
+
+The coverage in this run is `r 100 * mean(run95$covers)`%. Coverage varies across
+runs. With 50 intervals it changes in two-percentage-point increments, so it
+cannot equal 95% exactly.
+
+## More practice
+
+**1.** A 90% interval should be narrower because it retains less of the central
+bootstrap distribution.
+
+```{r}
+ci90 <- interval(0.90)
+run90 <- simulate_intervals(0.90)
+show_intervals(run90, 0.90)
+```
+
+**2.** The 90% interval is `r ci_text(ci90)` for the proportion of adults in the
+lab population who believe climate change affects their local community.
+
+**3.** The plot shows all 50 intervals. Observed coverage is
+`r 100 * mean(run90$covers)`%, compared with the nominal 90%.
+
+**4.** A 99% interval should be wider than both previous intervals. With the
+same sample, the 99% interval is `r ci_text(interval(0.99))`, interpreted using
+the same long-run definition of confidence for the Yes proportion.
+
+```{r}
+run99 <- simulate_intervals(0.99)
+show_intervals(run99, 0.99)
+mean(run99$covers)
+```
+
+**5.** Larger original samples produce narrower intervals on average because
+the standard error decreases.
+
+```{r}
+sapply(c(30, 60, 150), function(n) {
+  result <- simulate_intervals(0.95, n = n)
+  mean(result$high - result$low)
+})
+```
+
+**6.** More bootstrap resamples improve the stability of the estimated bounds.
+The underlying standard error is determined by the original sample size and
+the response variability.
+
+```{r}
+sapply(c(100, 1000, 10000), function(reps) {
+  widths <- replicate(30, {
+    x <- rbinom(reps, 60, p_hat) / 60
+    diff(quantile(x, c(0.025, 0.975)))
+  })
+  c(mean_width = mean(widths), variability_of_width = sd(widths))
+})
+```
+

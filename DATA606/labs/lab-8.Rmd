@@ -1,0 +1,205 @@
+---
+title: "DATA 606 | Lab 8 · Introduction to linear regression"
+output:
+  html_document:
+    toc: true
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE)
+data("hfi", package = "openintro")
+num <- function(x) formatC(x, digits = 3, format = "f")
+scatter <- function(model, labels, title) {
+  d <- model.frame(model)
+  plot(d[[2]], d[[1]], xlab = labels[1], ylab = labels[2],
+       main = title, pch = 16, cex = 0.55)
+  abline(model, lwd = 2)
+}
+diagnostics <- function(model) {
+  e <- residuals(model)
+  fit <- fitted(model)
+  par(mfrow = c(1, 3))
+  plot(fit, e, xlab = "Fitted value", ylab = "Residual", pch = 16, cex = 0.45)
+  abline(h = 0, lty = 2)
+  lines(lowess(fit, e), lwd = 2)
+  hist(e, breaks = 25, xlab = "Residual", main = "Residual histogram")
+  qqnorm(e, pch = 16, cex = 0.45)
+  qqline(e, lwd = 2)
+  par(mfrow = c(1, 1))
+}
+d1 <- hfi[complete.cases(hfi[, c("pf_expression_control", "pf_score")]), ]
+m1 <- lm(pf_score ~ pf_expression_control, data = d1)
+```
+
+## 1. Dataset dimensions
+
+```{r}
+dim(hfi)
+```
+
+The dataset has `r nrow(hfi)` country-year observations and `r ncol(hfi)` variables.
+
+## 2–3. Media freedom and personal freedom
+
+```{r}
+scatter(m1, c("Political pressure and controls on media (higher = less pressure)",
+              "Personal freedom score"),
+        "Personal freedom by media freedom score")
+r <- with(d1, cor(pf_expression_control, pf_score))
+r
+outliers <- order(abs(rstandard(m1)), decreasing = TRUE)[1:3]
+cbind(d1[outliers, c("countries", "year", "pf_expression_control", "pf_score")],
+      residual = residuals(m1)[outliers])
+```
+
+**2.** A scatterplot shows the relationship between these two numerical
+variables. The overall pattern is approximately linear and increasing.
+A line is reasonable for a rough prediction within the observed range.
+There is enough scatter that a prediction for one country-year can still
+be noticeably off.
+
+**3.** The correlation is `r num(r)`, indicating a strong positive association.
+The table identifies three unusual observations with the largest absolute
+standardized residuals. These country-years lie farther from the line than
+most observations.
+
+## 4. Minimizing the sum of squared residuals
+
+Run the following in an interactive R session to compare lines selected by hand.
+
+```{r eval=FALSE}
+DATA606::plot_ss(x = d1$pf_expression_control, y = d1$pf_score, showSquares = TRUE)
+```
+
+```{r}
+# Reproduce the line comparison without clicking on a plot.
+x <- d1$pf_expression_control
+y <- d1$pf_score
+candidate_slopes <- c(0.35, 0.45, 0.50, 0.60)
+candidate_intercepts <- mean(y) - candidate_slopes * mean(x)
+trial_ss <- mapply(function(a, b) sum((y - (a + b * x))^2),
+                  candidate_intercepts, candidate_slopes)
+data.frame(intercept = candidate_intercepts, slope = candidate_slopes,
+           sum_of_squares = trial_ss)
+c(exact_least_squares = sum(residuals(m1)^2))
+```
+
+The best candidate line has a residual sum of squares of
+`r num(min(trial_ss))`. The exact least-squares solution reaches
+`r num(sum(residuals(m1)^2))`. A hand-picked line using
+`DATA606::plot_ss()` can be compared with this minimum using the same rows.
+
+## 5. Predicting overall human freedom
+
+```{r}
+m2 <- lm(hf_score ~ pf_expression_control, data = hfi)
+coef(m2)
+```
+
+The fitted overall human freedom score is
+`r num(coef(m2)[1])` + `r num(coef(m2)[2])` times the media-control score.
+Each one-point rise in the media-control score, which indicates less
+political pressure, is associated with a fitted increase of
+`r num(coef(m2)[2])` points in overall human freedom. The association
+does not establish causation.
+
+## 6. Prediction and residual at 6.7
+
+```{r}
+prediction <- unname(predict(m1, newdata = data.frame(pf_expression_control = 6.7)))
+matches <- abs(d1$pf_expression_control - 6.7) < 1e-8
+match_type <- "Exact recorded 6.7"
+if (!any(matches)) {
+  matches <- round(d1$pf_expression_control, 1) == 6.7
+  match_type <- "Recorded predictor rounds to 6.7"
+}
+matching <- d1[matches, c("countries", "year", "pf_expression_control", "pf_score")]
+matching$predicted_at_6.7 <- rep(prediction, nrow(matching))
+matching$observed_minus_prediction <- matching$pf_score - matching$predicted_at_6.7
+matching$direction <- ifelse(matching$observed_minus_prediction > 0, "underestimate",
+                             ifelse(matching$observed_minus_prediction < 0,
+                                    "overestimate", "exact"))
+match_type
+matching
+```
+
+The regression predicts **`r num(prediction)`** for a media score of 6.7.
+The residual is observed personal freedom minus the prediction. A positive
+number means an underestimate, and a negative number means an overestimate.
+The table gives the answer for each matching country-year. When a recorded
+value was rounded to 6.7, the displayed difference uses the requested 6.7.
+
+## 7–9. Model diagnostics
+
+```{r fig.width=11, fig.height=4}
+diagnostics(m1)
+```
+
+```{r}
+e <- residuals(m1)
+fit <- fitted(m1)
+smoother <- lowess(fit, e)
+quartile <- cut(fit, breaks = unique(quantile(fit, seq(0, 1, 0.25))),
+                include.lowest = TRUE)
+spread <- tapply(e, quartile, sd)
+skew <- mean((e - mean(e))^3) / mean((e - mean(e))^2)^(3 / 2)
+c(residual_sd = sd(e), max_abs_smoothed_residual = max(abs(smoother$y)),
+  residual_skewness = skew)
+spread
+```
+
+**7.** The overall trend can be approximated by a line, but the residual
+smooth bends. The straight line leaves some systematic structure, so
+linearity is approximate.
+
+**8.** The histogram and Q–Q plot show departures from normality, especially
+in the tails. The residual skewness is `r num(skew)`. A normal error model
+is an approximation, especially for predicting an individual country-year.
+
+**9.** The vertical spread changes across fitted values. The residual standard
+deviations by fitted quartile range from `r num(min(spread))` to
+`r num(max(spread))`, so constant variability is questionable. Repeated
+country-years also mean standard regression inference may require accounting
+for dependence within countries.
+
+## More practice
+
+```{r}
+comparison <- hfi[complete.cases(hfi[, c("pf_score", "pf_expression_control",
+                                        "pf_religion")]), ]
+media_model <- lm(pf_score ~ pf_expression_control, data = comparison)
+religion_model <- lm(pf_score ~ pf_religion, data = comparison)
+scatter(religion_model, c("Religious freedom score", "Personal freedom score"),
+        "Personal freedom by religious freedom")
+r2_media <- summary(media_model)$r.squared
+r2_religion <- summary(religion_model)$r.squared
+c(media_control = r2_media, religious_freedom = r2_religion)
+```
+
+**1.** Religious freedom and personal freedom show a positive relationship
+that a straight line can summarize, although the scores are bounded and
+there is scatter at a given religious freedom score.
+
+**2.** On the same complete country-years, the religious freedom model has
+R-squared `r num(r2_religion)` and the media model has R-squared
+`r num(r2_media)`. The
+`r if (r2_media >= r2_religion) "media control" else "religious freedom"`
+score explains at least as much in-sample variation in personal freedom in
+this comparison. Both predictors describe components of the broader personal
+freedom index, so part of the relationship reflects how the index is built.
+
+**3.** I was interested in how strongly personal freedom tracks economic
+freedom. The two measure different aspects of society, yet can move
+together because they share country-level influences.
+
+```{r fig.width=11, fig.height=4}
+economic_model <- lm(pf_score ~ ef_score, data = hfi)
+summary(economic_model)
+diagnostics(economic_model)
+```
+
+The residual and Q–Q plots show where the line and normal-error approximation
+fit poorly. The fitted association summarizes the data and does not measure
+how a policy change would affect personal freedom.
+
