@@ -1,7 +1,7 @@
 ---
 title: "Assignment 5B: Chess Elo Calculations"
 author: "Noelle"
-date: 09/28/2026
+date: 09/25/2026
 format:
   html:
     toc: true
@@ -19,23 +19,25 @@ This report uses the chess tournament cross-table from Project 1 (64 players, 7 
 
 I will read the tournament text file and pull out each player's information and game results. I will match each game with the opponent's record to check that the results agree. Next, I will use the players' ratings to calculate the expected score for each game. I will add those expected scores for each player, compare them with the points the player actually earned, and identify the players with the largest differences.
 
-Formula and sources. I will calculate the expected score of a player with rating $R_A$ against an opponent with rating $R_B$ using:
+I will calculate the expected score of a player with rating $R_A$ against an opponent with rating $R_B$ using the Elo formula below.
 
 $$E_A = \frac{1}{1 + 10^{(R_B - R_A)/400}}$$
 
-Source: Wikipedia contributors, "Elo rating system", https://en.wikipedia.org/wiki/Elo_rating_system (accessed September 24, 2026). The assignment also points to the video "The Elo Rating System for Chess and Beyond" (February 15, 2019).
+Wikipedia contributors, “Elo rating system” (accessed September 24, 2026). The assignment also points to the video “The Elo Rating System for Chess and Beyond” (February 15, 2019). [Wikipedia](https://en.wikipedia.org/wiki/Elo_rating_system) · [Reference video](https://www.youtube.com/watch?v=AsYfbmp0To0)
 
 **Data.** `tournamentinfo.txt` is the Project 1 text file, stored in this GitHub repository so the report is reproducible.
 
 # Step 1: Read the raw text and learn its layout
 
-The file is not a table. Each player takes two lines (a player line and a detail line) followed by a separator line. We first label every line.
+Each player takes two lines (a player line and a detail line) followed by a separator line. We first label every line.
 
 ```{r read}
 library(tidyverse)
 
 url <- "https://raw.githubusercontent.com/NawelMe/DATA607-Fall-2026/main/project-01/tournamentinfo.txt"
-raw_lines <- read_lines(url)
+
+# Use the copy in the project folder if it is there, otherwise download it from GitHub
+raw_lines <- if (file.exists("tournamentinfo.txt")) read_lines("tournamentinfo.txt") else read_lines(url)
 
 line_type <- case_when(
   str_detect(raw_lines, "^-+$")              ~ "separator",
@@ -77,11 +79,11 @@ stopifnot(players$name[which.min(players$pre_rating)] == "JACOB ALEXANDER LAVALL
 stopifnot(players$name[which.max(players$pre_rating)] == "GARY HUA")
 ```
 
-Ten players have a *provisional* rating in the file (for example `R: 1220P13`, a rating based on few games). We use the number before the `P`.
+Ten players have a *provisional* rating in the file (for example, `R: 1220P13`, a rating based on few games). We use the number before the `P`.
 
-# Step 3: One row per game
+# Step 3: One row per player per round
 
-A result cell such as `W  39` means "won against player 39". Cells with only a letter (`H`, `B`, `U`, `X`) are rounds without an opponent: a half-point bye, a full-point bye, an unplayed round and a forfeit.
+A result cell such as `W  39` means the player won against player 39. Four codes identify entries without an opponent. `H` is a half-point bye, `B` is a full-point bye, `U` is an unplayed round, and `X` is a forfeit.
 
 ```{r games}
 games <- map(4:10, \(i) str_split_i(players$player_line, "\\|", i)) |>
@@ -103,20 +105,20 @@ stopifnot(all(is.na(games$opp_num) == games$result %in% c("H", "B", "U", "X")))
 # Mirror test: if A beat B in round r, B must show a loss to A in round r
 played <- games |> filter(!is.na(opp_num))
 mirror <- played |>
-  rename(pair_num = opp_num, opp_num = pair_num) |>     # swap the two columns
+  rename(pair_num = opp_num, opp_num = pair_num) |>
   mutate(mirror_result = case_when(result == "W" ~ "L", result == "L" ~ "W", TRUE ~ "D")) |>
   select(pair_num, opp_num, round, mirror_result)
 joined <- inner_join(played, mirror, by = c("pair_num", "opp_num", "round"))
 stopifnot(nrow(joined) == nrow(played), all(joined$result == joined$mirror_result))
 
-# Points check: 204 points from played games + 16 from byes = 220 total points
+# Points check: 204 points from played games + 16 from entries without opponents = 220
 stopifnot(sum(games$result == "W") + 0.5 * sum(games$result == "D") == 204)
 stopifnot(0.5 * sum(games$result == "H") + sum(games$result %in% c("B", "X")) == 16)
 ```
 
 # Step 4: Elo expected score for every game
 
-For rounds without an opponent there is nothing to predict, so we treat them as **neutral**: the expected points equal the actual points. A bye therefore adds the same amount to both totals and cannot make a player look like an over- or underperformer.
+For rounds with an opponent, I calculate expected points from the two pre-tournament ratings. I treat rounds without an opponent as neutral by assigning the actual points to the expected total as well.
 
 ```{r elo}
 elo_expected <- function(rating, opp_rating) {
@@ -161,15 +163,15 @@ stopifnot(nrow(player_summary) == 64)
 # Actual points must reproduce the official totals in the file
 stopifnot(all(near(player_summary$actual,
                    players$total_pts[match(player_summary$pair_num, players$pair_num)])))
-stopifnot(near(sum(player_summary$diff), 0))          # zero-sum: every game gives and takes the same
+stopifnot(near(sum(player_summary$diff), 0))
 stopifnot(sum(player_summary$games_played < 7) == 23)
 ```
 
 # Step 6: The five biggest over- and underperformers
 
 ```{r rank}
-top5    <- player_summary |> slice_max(diff, n = 5)
-bottom5 <- player_summary |> slice_min(diff, n = 5)
+top5    <- player_summary |> slice_max(diff, n = 5, with_ties = FALSE)
+bottom5 <- player_summary |> slice_min(diff, n = 5, with_ties = FALSE)
 
 show <- function(d) {
   d |>
@@ -180,13 +182,15 @@ show <- function(d) {
 }
 ```
 
-**Overperformers** (actual points above the expectation):
+The Actual and Expected columns include points awarded in rounds without an opponent. Those rounds contribute zero to the Difference column.
+
+**Overperformers** (actual points above the expectation)
 
 ```{r top5}
 show(top5)
 ```
 
-**Underperformers** (actual points below the expectation):
+**Underperformers** (actual points below the expectation)
 
 ```{r bottom5}
 show(bottom5)
@@ -216,15 +220,14 @@ stopifnot(all(abs(round(bottom5$diff, 2) - c(-2.78, -2.52, -2.40, -2.01, -1.59))
 stopifnot(sum(player_summary$diff > 0) == 28, sum(player_summary$diff < 0) == 36)
 ```
 
-<!-- TODO (student): rewrite these observations in your own words. -->
-The overperformers were mostly low-rated players (average rating about 1151) and the underperformers were mostly high-rated (about 1473). Some low ratings are unreliable: Jacob Alexander Lavalley's rating of 377 is marked provisional (based on only 3 games), and so is Zachary James Houghton's 1220. Aditya Bajaj's 1384 is not provisional and his rating rose to 1640 after the tournament, so his result reflects real strength beyond his old rating.
+The five biggest overperformers had an average pre-tournament rating of 1,151, compared with 1,473 for the five biggest underperformers. Two of the top five overperformers, Jacob Alexander Lavalley and Zachary James Houghton, had provisional ratings based on relatively few games. Aditya Bajaj had the largest positive difference at 4.05 points above his Elo expectation. His rating rose from 1,384 to 1,640 after the tournament.
 
 # Notes and limitations
 
-- **Byes and forfeits** (40 rounds) have no opponent, so they are treated as neutral (expected points equal actual points).
-- **Provisional ratings** (10 players) are noisy; large differences for those players partly reflect a bad starting rating.
-- **Games played differ**: 23 players played fewer than 7 games, so they cannot build up large positive or negative differences.
-- **Formula variants**: other implementations of Elo differ in small details; this report uses the standard logistic formula with a scale of 400.
+- **Rounds without an opponent.** There were 40 player-round entries without an opponent, including byes, unplayed rounds, and one forfeit. I assigned the same actual and expected points to each of these entries, so they did not affect the difference between actual and expected points.
+- **Provisional ratings.** Ten players had provisional ratings. These ratings are based on fewer games, so their expected scores may be less reliable.
+- **Games played.** Twenty-three players played fewer than seven games and had fewer opportunities to accumulate positive or negative differences.
+- **Formula variants.** Other implementations of Elo differ in small details. This report uses the standard logistic formula with a scale of 400.
 
 # Appendix: all 64 players
 
@@ -238,16 +241,14 @@ player_summary |>
 
 # Conclusions and Findings
 
-I found Aditya Bajaj scored about 4.05 points above his Elo expectation, the largest positive difference. Loren Schwiebert scored about 2.78 points below his expectation, the largest negative difference. Expected score estimates points based on the ratings of a player and their opponents. It does not guarantee a result.
+I found Aditya Bajaj scored about 4.05 points above his Elo expectation, the largest positive difference. Loren Schwiebert scored about 2.78 points below his expectation, the largest negative difference. Expected score estimates points based on the ratings of a player and their opponents.
 
-Some low-rated players performed better than their ratings suggested. Provisional ratings based on few games are less reliable, and improving players might have outgrown their earlier ratings. One strong tournament is not enough to know whether this performance will continue.
+Some low-rated players performed better than their ratings suggested. Provisional ratings based on few games are less reliable, and improving players might have outgrown their earlier ratings. A single tournament offers limited evidence about whether this performance will continue.
 
-I treated rounds without opponents as neutral, so they did not affect the differences. Players who played fewer games had fewer opportunities to score above or below expectations. My results cover one tournament and one Elo formula.
-
-I would compare these results with the post-tournament ratings and repeat the analysis across several tournaments. I would also check my calculations against another Elo implementation.
+My results cover one tournament and one Elo formula. I would compare these results with the post-tournament ratings, repeat the analysis across several tournaments, and check my calculations against another Elo implementation.
 
 # AI Use
 
 Anthropic. (2026). *Claude Sonnet 5* [Large language model]. https://claude.ai. Accessed September 24, 2026.
 
-I used Claude to help me understand the Elo formula and regular expressions, work through parts of the R code, and proofread my explanations. I reviewed the code, checked the results against calculations, and revised the writing before submitting the report.
+I used Claude for clarification on the Elo formula and regular expressions, assistance with specific portions of my R code, and proofreading. I completed the analysis, reviewed the code, checked the results against calculations, and made the final revisions to the report. I also used ChatGPT to check the results independently and help revise the explanations and ranking code.
